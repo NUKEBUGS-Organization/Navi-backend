@@ -4,7 +4,9 @@ import { AuthModule } from './features/auth/auth.module';
 
 @Module({
   imports: [
-    MongooseModule.forRoot('mongodb://localhost:27017/navi'),
+    MongooseModule.forRoot(
+      'mongodb+srv://navi:navibackend@cluster0.nktmmeq.mongodb.net/navi?appName=Cluster0',
+    ),
     AuthModule,
   ],
   providers: [],
