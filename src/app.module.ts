@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { OrganizationModule } from './modules/organization/organization.module';
+import { AuthModule } from './features/auth/auth.module';
 
 @Module({
   imports: [
-    MongooseModule.forRoot('mongodb://localhost:27017/navi_platform'),
-    OrganizationModule
+    MongooseModule.forRoot('mongodb://localhost:27017/navi'),
+    AuthModule,
   ],
+  providers: [],
+  controllers: [],
 })
 export class AppModule {}
