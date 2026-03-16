@@ -3,9 +3,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import mongoose from 'mongoose';
 
 export enum UserRole {
-  EMPLOYEE = 'employee',
+  SUPER_ADMIN = 'super_admin',
   ADMIN = 'admin',
   MANAGER = 'manager',
+  EMPLOYEE = 'employee',
 }
 
 @Schema({ timestamps: true })
@@ -22,24 +23,24 @@ export class User {
   email: string;
 
   @ApiProperty()
-  @Prop()
+  @Prop({ select: false })
   password: string;
 
   @ApiProperty({ enum: UserRole })
-  @Prop()
+  @Prop({ required: true })
   role: UserRole;
 
-  @ApiProperty({ type: String })
-  @Prop()
-  organizationId: mongoose.Types.ObjectId;
+  @ApiProperty({ type: String, required: false })
+  @Prop({ required: false })
+  organizationId?: mongoose.Types.ObjectId;
 
-  @ApiProperty({ type: [String] })
-  @Prop([mongoose.Schema.Types.ObjectId])
-  departments: mongoose.Types.ObjectId[];
+  @ApiProperty({ type: [String], required: false })
+  @Prop({ type: [String], required: false, default: [] })
+  departments?: string[];
 
-  @ApiProperty()
-  @Prop()
-  isActive: boolean;
+  @ApiProperty({ required: false })
+  @Prop({ default: true })
+  isActive?: boolean;
 
   @ApiProperty()
   createdAt: Date;

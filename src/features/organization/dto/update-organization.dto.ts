@@ -1,0 +1,51 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { IsArray, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+
+export class UpdateOrganizationDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  industry?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  employeeCount?: number;
+
+  @ApiProperty({ type: [String], required: false, description: 'Department names' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  departments?: string[];
+}

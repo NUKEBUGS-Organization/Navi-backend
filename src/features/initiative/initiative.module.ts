@@ -1,0 +1,17 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { AuthModule } from '../auth/auth.module';
+import { InitiativeSchema } from './initiative.entity';
+import { InitiativeController } from './initiative.controller';
+import { InitiativeService } from './initiative.service';
+
+@Module({
+  imports: [
+    AuthModule,
+    MongooseModule.forFeature([{ name: 'Initiative', schema: InitiativeSchema }]),
+  ],
+  controllers: [InitiativeController],
+  providers: [InitiativeService],
+  exports: [InitiativeService],
+})
+export class InitiativeModule {}
