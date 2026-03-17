@@ -6,11 +6,23 @@ import { Risk } from './risk.entity';
 import { CreateRiskDto } from './dto/create-risk.dto';
 import { UpdateRiskDto } from './dto/update-risk.dto';
 import { InitiativeService } from '../initiative/initiative.service';
+import { AssessmentSubmission } from '../assessment/assessment-submission.entity';
+
+/** Risk level from assessment avg score: >=4 Low, 2.5-4 Medium, <2.5 High */
+export interface AssessmentDerivedRiskDto {
+  initiativeId: string;
+  initiativeTitle: string;
+  riskLevel: 'Medium' | 'High';
+  avgScore: number;
+  submissionCount: number;
+  lastSubmittedAt?: string;
+}
 
 @Injectable()
 export class RiskService {
   constructor(
     @InjectModel('Risk') private readonly model: Model<Risk>,
+    @InjectModel('AssessmentSubmission') private readonly submissionModel: Model<AssessmentSubmission>,
     private readonly initiativeService: InitiativeService,
   ) {}
 
@@ -81,6 +93,43 @@ export class RiskService {
       .deleteOne({ _id: new mongoose.Types.ObjectId(id), organizationId: new mongoose.Types.ObjectId(organizationId) })
       .exec();
     return (result.deletedCount ?? 0) > 0;
+  }
+
+  /** Initiatives with medium/high risk from assessment submissions (avg score < 4). */
+  async getAssessmentDerivedRisks(organizationId: string): Promise<AssessmentDerivedRiskDto[]> {
+    const orgId = new mongoose.Types.ObjectId(organizationId);
+    const subs = await this.submissionModel
+      .find({ organizationId: orgId })
+      .lean()
+      .exec();
+    if (subs.length === 0) return [];
+    const byInit = subs.reduce<Record<string, { sum: number; count: number; lastAt?: Date }>>((acc, s) => {
+      const id = (s as AssessmentSubmission).initiativeId?.toString?.() ?? (s as { initiativeId: unknown }).initiativeId as string;
+      if (!id) return acc;
+      if (!acc[id]) acc[id] = { sum: 0, count: 0 };
+      acc[id].sum += (s as AssessmentSubmission).overallScore ?? 0;
+      acc[id].count += 1;
+      const at = (s as AssessmentSubmission & { createdAt?: Date }).createdAt;
+      if (at && (!acc[id].lastAt || at > acc[id].lastAt!)) acc[id].lastAt = at;
+      return acc;
+    }, {});
+    const results: AssessmentDerivedRiskDto[] = [];
+    for (const [initId, data] of Object.entries(byInit)) {
+      if (data.count === 0) continue;
+      const avg = data.sum / data.count;
+      if (avg >= 4) continue;
+      const riskLevel: 'Medium' | 'High' = avg < 2.5 ? 'High' : 'Medium';
+      const initiative = await this.initiativeService.findOne(initId, organizationId);
+      results.push({
+        initiativeId: initId,
+        initiativeTitle: initiative?.title ?? 'Unknown',
+        riskLevel,
+        avgScore: Math.round(avg * 10) / 10,
+        submissionCount: data.count,
+        lastSubmittedAt: data.lastAt?.toISOString?.() ?? undefined,
+      });
+    }
+    return results.sort((a, b) => (a.riskLevel === 'High' ? -1 : 1) - (b.riskLevel === 'High' ? -1 : 1));
   }
 
   /** Count by severity for dashboard. */

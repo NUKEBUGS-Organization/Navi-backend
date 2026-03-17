@@ -37,6 +37,13 @@ export class RiskController {
     return this.service.countBySeverity(orgId);
   }
 
+  @Get('assessment-derived')
+  async assessmentDerived(@CurrentUser() user: Partial<User>) {
+    const orgId = getOrgId(user);
+    if (!orgId) return [];
+    return this.service.getAssessmentDerivedRisks(orgId);
+  }
+
   @Get()
   async list(
     @Query('initiativeId') initiativeId: string,

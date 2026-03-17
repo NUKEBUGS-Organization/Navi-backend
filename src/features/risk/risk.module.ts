@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { InitiativeModule } from '../initiative/initiative.module';
+import { AssessmentSubmissionSchema } from '../assessment/assessment-submission.entity';
 import { RiskSchema } from './risk.entity';
 import { RiskController } from './risk.controller';
 import { RiskService } from './risk.service';
@@ -10,7 +11,10 @@ import { RiskService } from './risk.service';
   imports: [
     AuthModule,
     InitiativeModule,
-    MongooseModule.forFeature([{ name: 'Risk', schema: RiskSchema }]),
+    MongooseModule.forFeature([
+      { name: 'Risk', schema: RiskSchema },
+      { name: 'AssessmentSubmission', schema: AssessmentSubmissionSchema },
+    ]),
   ],
   controllers: [RiskController],
   providers: [RiskService],

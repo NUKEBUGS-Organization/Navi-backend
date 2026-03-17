@@ -36,6 +36,11 @@ export class Assessment {
   @Prop({ default: '' })
   audience?: string;
 
+  /** When audience is 'department', these are the department names who can take the assessment. */
+  @ApiProperty({ type: [String], required: false })
+  @Prop({ type: [String], default: [] })
+  audienceDepartments?: string[];
+
   @ApiProperty({ required: false })
   @Prop({ default: '' })
   description?: string;

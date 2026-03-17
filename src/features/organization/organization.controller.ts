@@ -24,7 +24,7 @@ export class OrganizationController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiBearerAuth()
   @Get('me')
   async getMyOrganization(@CurrentUser() user: Partial<User>) {
@@ -39,7 +39,7 @@ export class OrganizationController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiBearerAuth()
   @Patch('me')
   async updateMyOrganization(@CurrentUser() user: Partial<User>, @Body() dto: UpdateOrganizationDto) {

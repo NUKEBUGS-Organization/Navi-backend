@@ -14,6 +14,6 @@ import { AdoptionService } from './adoption.service';
   ],
   controllers: [AdoptionController],
   providers: [AdoptionService],
-  exports: [AdoptionService],
+  exports: [AdoptionService, MongooseModule.forFeature([{ name: 'Adoption', schema: AdoptionSchema }])],
 })
 export class AdoptionModule {}

@@ -89,12 +89,18 @@ export class AuthService {
     }
   }
 
-  /** List users in an organization (for org admin). Returns sanitized users. */
+  /** List users in an organization (for org admin and managers). Returns sanitized users. */
   async findAllByOrganization(organizationId: string): Promise<Partial<User>[]> {
     try {
       const orgObjectId = new mongoose.Types.ObjectId(organizationId);
+      // Match both ObjectId and string so all org users are returned regardless of storage type
       const users = await this.userModel
-        .find({ organizationId: orgObjectId })
+        .find({
+          $or: [
+            { organizationId: orgObjectId },
+            { organizationId },
+          ],
+        })
         .sort({ createdAt: -1 })
         .lean()
         .exec();
@@ -151,7 +157,12 @@ export class AuthService {
             HttpStatus.FORBIDDEN,
           );
         }
-        (user as CreateUserDto & { organizationId?: unknown }).organizationId = orgId;
+        // Ensure we store ObjectId so findAllByOrganization finds this user
+        const orgIdForDb =
+          typeof orgId === 'string'
+            ? new mongoose.Types.ObjectId(orgId)
+            : (orgId as mongoose.Types.ObjectId);
+        (user as CreateUserDto & { organizationId?: unknown }).organizationId = orgIdForDb;
       }
       if (role === UserRole.ADMIN && createdByRole === UserRole.SUPER_ADMIN && !user.organizationId) {
         throw new HttpException(

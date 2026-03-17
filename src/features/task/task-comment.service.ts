@@ -74,4 +74,31 @@ export class TaskCommentService {
       }),
     );
   }
+
+  /** Comments for all tasks of an initiative, newest first. */
+  async findByInitiative(initiativeId: string, organizationId: string): Promise<TaskCommentDto[]> {
+    const tasks = await this.taskService.findByInitiative(initiativeId, organizationId);
+    if (tasks.length === 0) return [];
+    const taskIds = tasks.map((t) => (t as { _id: mongoose.Types.ObjectId })._id ?? t);
+    const list = await this.commentModel
+      .find({
+        taskId: { $in: taskIds },
+        organizationId: new mongoose.Types.ObjectId(organizationId),
+      })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean()
+      .exec();
+    return (list as Array<TaskComment & { _id: mongoose.Types.ObjectId; userId: mongoose.Types.ObjectId; taskId: mongoose.Types.ObjectId }>).map(
+      (c) => ({
+        _id: c._id.toString(),
+        taskId: (c.taskId as mongoose.Types.ObjectId).toString(),
+        organizationId,
+        userId: (c.userId as mongoose.Types.ObjectId).toString(),
+        content: c.content,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+      }),
+    );
+  }
 }

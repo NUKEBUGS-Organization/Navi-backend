@@ -26,6 +26,14 @@ export class CreateAdoptionDto {
   @Max(100)
   percentAdopted?: number;
 
+  /** Target adoption % for this milestone (e.g. 50 or 100). Progress is auto-calculated from linked tasks. */
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  targetPercent?: number;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

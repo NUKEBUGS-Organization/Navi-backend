@@ -50,6 +50,11 @@ export class Task {
   @Prop({ default: false })
   isBlocked?: boolean;
 
+  /** When set, task completion drives this adoption milestone's percentAdopted. */
+  @ApiProperty({ required: false })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Adoption' })
+  adoptionMilestoneId?: mongoose.Types.ObjectId;
+
   @ApiProperty()
   createdAt: Date;
 
@@ -61,3 +66,4 @@ export const TaskSchema = SchemaFactory.createForClass(Task);
 TaskSchema.index({ initiativeId: 1, createdAt: -1 });
 TaskSchema.index({ organizationId: 1 });
 TaskSchema.index({ assigneeId: 1 });
+TaskSchema.index({ adoptionMilestoneId: 1, organizationId: 1 });

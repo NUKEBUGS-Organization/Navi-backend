@@ -4,12 +4,14 @@ import { Model } from 'mongoose';
 import mongoose from 'mongoose';
 import { AssessmentSubmission } from './assessment-submission.entity';
 import { Assessment } from './assessment.entity';
+import { InitiativeService } from '../initiative/initiative.service';
 
 @Injectable()
 export class AssessmentSubmissionService {
   constructor(
     @InjectModel('AssessmentSubmission') private readonly submissionModel: Model<AssessmentSubmission>,
     @InjectModel('Assessment') private readonly assessmentModel: Model<Assessment>,
+    private readonly initiativeService: InitiativeService,
   ) {}
 
   async create(
@@ -31,6 +33,13 @@ export class AssessmentSubmissionService {
     const initId = aid.initiativeId?.toString?.() ?? (aid.initiativeId as unknown as string);
     if (orgId !== organizationId) {
       throw new HttpException('Assessment does not belong to your organization.', HttpStatus.FORBIDDEN);
+    }
+    const initiative = await this.initiativeService.findOne(initId, organizationId);
+    if (!initiative || initiative.status === 'DRAFT') {
+      throw new HttpException(
+        'Cannot submit assessments for an initiative in Draft. An admin must set the initiative to Active first.',
+        HttpStatus.FORBIDDEN,
+      );
     }
     const doc = await this.submissionModel.create({
       assessmentId: new mongoose.Types.ObjectId(assessmentId),

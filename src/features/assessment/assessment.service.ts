@@ -13,11 +13,23 @@ const AUDIENCE_TO_ROLES: Record<string, UserRole[]> = {
   admin: [UserRole.ADMIN, UserRole.SUPER_ADMIN],
   managers: [UserRole.MANAGER],
   'all-employees': [UserRole.EMPLOYEE],
+  department: [], // checked via audienceDepartments + user departments
 };
 
-function canUserSeeAudience(audience: string | undefined, userRole: string): boolean {
+function canUserSeeAudience(
+  audience: string | undefined,
+  userRole: string,
+  userDepartments?: string[],
+  audienceDepartments?: string[],
+): boolean {
   const a = (audience || '').trim();
   if (!a) return true;
+  if (a === 'department') {
+    if (!audienceDepartments?.length) return true;
+    if (!userDepartments?.length) return false;
+    const deptSet = new Set(audienceDepartments.map((d) => d.trim().toLowerCase()));
+    return userDepartments.some((d) => deptSet.has(String(d).trim().toLowerCase()));
+  }
   const allowed = AUDIENCE_TO_ROLES[a];
   if (!allowed) return true;
   return allowed.some((r) => r === userRole);
@@ -44,6 +56,7 @@ export class AssessmentService {
       ownerId: dto.ownerId ? new mongoose.Types.ObjectId(dto.ownerId) : undefined,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       audience: dto.audience ?? '',
+      audienceDepartments: dto.audienceDepartments ?? [],
       description: dto.description ?? '',
       steps,
       completed: false,

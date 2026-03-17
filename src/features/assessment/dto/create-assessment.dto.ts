@@ -37,6 +37,12 @@ export class CreateAssessmentDto {
   @IsString()
   audience?: string;
 
+  @ApiProperty({ type: [String], required: false, description: 'When audience is "department", list of department names' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  audienceDepartments?: string[];
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

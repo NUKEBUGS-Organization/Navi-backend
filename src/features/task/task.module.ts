@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { InitiativeModule } from '../initiative/initiative.module';
+import { AdoptionModule } from '../adoption/adoption.module';
 import { TaskSchema } from './task.entity';
 import { TaskCommentSchema } from './task-comment.entity';
 import { TaskController } from './task.controller';
@@ -12,6 +13,7 @@ import { TaskCommentService } from './task-comment.service';
   imports: [
     AuthModule,
     InitiativeModule,
+    AdoptionModule,
     MongooseModule.forFeature([
       { name: 'Task', schema: TaskSchema },
       { name: 'TaskComment', schema: TaskCommentSchema },
@@ -19,6 +21,6 @@ import { TaskCommentService } from './task-comment.service';
   ],
   controllers: [TaskController],
   providers: [TaskService, TaskCommentService],
-  exports: [TaskService],
+  exports: [TaskService, TaskCommentService],
 })
 export class TaskModule {}

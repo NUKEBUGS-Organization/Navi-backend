@@ -42,4 +42,9 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsBoolean()
   isBlocked?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  adoptionMilestoneId?: string;
 }

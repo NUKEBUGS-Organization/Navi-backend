@@ -60,7 +60,13 @@ export class InitiativeController {
     @CurrentUser() user: Partial<User>,
   ) {
     const orgId = this.getOrgId(user);
-    return this.initiativeService.create(dto, orgId);
+    const role = (user as { role?: UserRole }).role;
+    // Managers can create initiatives but they always start as DRAFT until an admin approves.
+    const payload: CreateInitiativeDto =
+      role === UserRole.MANAGER
+        ? ({ ...dto, status: 'DRAFT' } as CreateInitiativeDto)
+        : dto;
+    return this.initiativeService.create(payload, orgId);
   }
 
   @Patch(':id')
@@ -70,7 +76,13 @@ export class InitiativeController {
     @CurrentUser() user: Partial<User>,
   ) {
     const orgId = this.getOrgId(user);
-    const updated = await this.initiativeService.update(id, dto, orgId);
+    const role = (user as { role?: UserRole }).role;
+    // Managers cannot move initiatives out of DRAFT; only admins can approve (set ACTIVE/PLANNING).
+    const payload: UpdateInitiativeDto =
+      role === UserRole.MANAGER && dto.status && dto.status !== 'DRAFT'
+        ? ({ ...dto, status: 'DRAFT' } as UpdateInitiativeDto)
+        : dto;
+    const updated = await this.initiativeService.update(id, payload, orgId);
     if (!updated) {
       throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);
     }

@@ -6,6 +6,7 @@ import { Task } from './task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { InitiativeService } from '../initiative/initiative.service';
+import { Adoption } from '../adoption/adoption.entity';
 
 function statusFromProgress(progress: number): Task['status'] {
   if (progress >= 100) return 'Completed';
@@ -17,15 +18,24 @@ function statusFromProgress(progress: number): Task['status'] {
 export class TaskService {
   constructor(
     @InjectModel('Task') private readonly taskModel: Model<Task>,
+    @InjectModel('Adoption') private readonly adoptionModel: Model<Adoption>,
     private readonly initiativeService: InitiativeService,
   ) {}
 
   async create(dto: CreateTaskDto, organizationId: string): Promise<Task> {
+    const initiative = await this.initiativeService.findOne(dto.initiativeId, organizationId);
+    if (!initiative || initiative.status === 'DRAFT') {
+      throw new HttpException(
+        'Cannot add tasks to an initiative in Draft. An admin must set the initiative to Active first.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     const orgId = new mongoose.Types.ObjectId(organizationId);
     const initId = new mongoose.Types.ObjectId(dto.initiativeId);
     const assigneeId = new mongoose.Types.ObjectId(dto.assigneeId);
     const progress = dto.progress ?? 0;
     const status = statusFromProgress(progress);
+    const adoptionMilestoneId = dto.adoptionMilestoneId ? new mongoose.Types.ObjectId(dto.adoptionMilestoneId) : undefined;
     const doc = await this.taskModel.create({
       initiativeId: initId,
       organizationId: orgId,
@@ -37,8 +47,10 @@ export class TaskService {
       status,
       progress,
       isBlocked: dto.isBlocked ?? false,
+      adoptionMilestoneId,
     });
-    await this.recalcInitiativeProgress(dto.initiativeId, organizationId);
+    if (adoptionMilestoneId) await this.recalcAdoptionProgress(adoptionMilestoneId.toString(), organizationId);
+    await this.recalcInitiativeProgressWithAdoptions(dto.initiativeId, organizationId);
     return doc.toObject?.() ?? (doc as unknown as Task);
   }
 
@@ -99,6 +111,14 @@ export class TaskService {
   ): Promise<Task | null> {
     const task = await this.findOne(id, organizationId);
     if (!task) return null;
+    const initiativeIdStr = (task.initiativeId as mongoose.Types.ObjectId)?.toString?.() ?? (task.initiativeId as unknown as string);
+    const initiative = await this.initiativeService.findOne(initiativeIdStr, organizationId);
+    if (!initiative || initiative.status === 'DRAFT') {
+      throw new HttpException(
+        'Cannot update tasks for an initiative in Draft. An admin must set the initiative to Active first.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     const assigneeStr = (task.assigneeId as mongoose.Types.ObjectId)?.toString?.() ?? (task.assigneeId as unknown as string);
     const isAssignee = assigneeStr === userId;
     const isEmployee = userRole === 'employee';
@@ -118,7 +138,9 @@ export class TaskService {
         .lean()
         .exec();
       const initiativeId = (task.initiativeId as mongoose.Types.ObjectId)?.toString?.() ?? (task.initiativeId as unknown as string);
-      await this.recalcInitiativeProgress(initiativeId, organizationId);
+      const oldAdoptionId = (task as Task & { adoptionMilestoneId?: mongoose.Types.ObjectId }).adoptionMilestoneId?.toString?.();
+      if (oldAdoptionId) await this.recalcAdoptionProgress(oldAdoptionId, organizationId);
+      await this.recalcInitiativeProgressWithAdoptions(initiativeId, organizationId);
       return updated as Task | null;
     }
 
@@ -134,38 +156,75 @@ export class TaskService {
     }
     if (dto.status !== undefined && dto.progress === undefined) updates.status = dto.status as Task['status'];
     if (dto.isBlocked !== undefined) updates.isBlocked = dto.isBlocked;
+    if (dto.adoptionMilestoneId !== undefined) {
+      updates.adoptionMilestoneId = dto.adoptionMilestoneId
+        ? (new mongoose.Types.ObjectId(dto.adoptionMilestoneId) as unknown as mongoose.Types.ObjectId)
+        : undefined;
+    }
     const taskId = new mongoose.Types.ObjectId(id);
     const orgId = new mongoose.Types.ObjectId(organizationId);
+    const oldAdoptionId = (task as Task & { adoptionMilestoneId?: mongoose.Types.ObjectId }).adoptionMilestoneId?.toString?.();
     const updated = await this.taskModel
       .findOneAndUpdate({ _id: taskId, organizationId: orgId }, { $set: updates }, { new: true })
       .lean()
       .exec();
     const initiativeId = (task.initiativeId as mongoose.Types.ObjectId)?.toString?.() ?? (task.initiativeId as unknown as string);
-    await this.recalcInitiativeProgress(initiativeId, organizationId);
+    if (oldAdoptionId) await this.recalcAdoptionProgress(oldAdoptionId, organizationId);
+    const newAdoptionId = (updated as Task & { adoptionMilestoneId?: mongoose.Types.ObjectId })?.adoptionMilestoneId?.toString?.();
+    if (newAdoptionId && newAdoptionId !== oldAdoptionId) await this.recalcAdoptionProgress(newAdoptionId, organizationId);
+    await this.recalcInitiativeProgressWithAdoptions(initiativeId, organizationId);
     return updated as Task | null;
   }
 
   async delete(id: string, organizationId: string): Promise<boolean> {
     const task = await this.findOne(id, organizationId);
     if (!task) return false;
+    const adoptionId = (task as Task & { adoptionMilestoneId?: mongoose.Types.ObjectId }).adoptionMilestoneId?.toString?.();
     const taskId = new mongoose.Types.ObjectId(id);
     const orgId = new mongoose.Types.ObjectId(organizationId);
     await this.taskModel.deleteOne({ _id: taskId, organizationId: orgId }).exec();
     const initiativeId = (task.initiativeId as mongoose.Types.ObjectId)?.toString?.() ?? (task.initiativeId as unknown as string);
-    await this.recalcInitiativeProgress(initiativeId, organizationId);
+    if (adoptionId) await this.recalcAdoptionProgress(adoptionId, organizationId);
+    await this.recalcInitiativeProgressWithAdoptions(initiativeId, organizationId);
     return true;
   }
 
-  private async recalcInitiativeProgress(initiativeId: string, organizationId: string): Promise<void> {
+  /** Recompute adoption.percentAdopted from linked tasks: (completedCount / totalLinked) * targetPercent. */
+  private async recalcAdoptionProgress(adoptionId: string, organizationId: string): Promise<void> {
+    const adoption = await this.adoptionModel
+      .findOne({ _id: new mongoose.Types.ObjectId(adoptionId), organizationId: new mongoose.Types.ObjectId(organizationId) })
+      .lean()
+      .exec();
+    if (!adoption) return;
+    const adoptionOid = new mongoose.Types.ObjectId(adoptionId);
+    const linked = await this.taskModel
+      .find({ adoptionMilestoneId: adoptionOid, organizationId: new mongoose.Types.ObjectId(organizationId) })
+      .lean()
+      .exec();
+    const total = linked.length;
+    const completed = linked.filter((t) => ((t as Task).progress ?? 0) >= 100).length;
+    const targetPercent = (adoption as Adoption).targetPercent ?? 100;
+    const percentAdopted = total === 0 ? 0 : Math.round((completed / total) * targetPercent);
+    await this.adoptionModel
+      .updateOne(
+        { _id: adoptionOid, organizationId: new mongoose.Types.ObjectId(organizationId) },
+        { $set: { percentAdopted } },
+      )
+      .exec();
+  }
+
+  /** Initiative progress = (sum of task progress + sum of adoption percentAdopted) / (task count + adoption count). */
+  private async recalcInitiativeProgressWithAdoptions(initiativeId: string, organizationId: string): Promise<void> {
     const initId = new mongoose.Types.ObjectId(initiativeId);
     const orgId = new mongoose.Types.ObjectId(organizationId);
-    const tasks = await this.taskModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec();
-    if (tasks.length === 0) {
-      await this.initiativeService.updateProgress(initiativeId, organizationId, 0);
-      return;
-    }
-    const total = tasks.reduce((sum, t) => sum + ((t as Task).progress ?? 0), 0);
-    const avg = Math.round(total / tasks.length);
-    await this.initiativeService.updateProgress(initiativeId, organizationId, avg);
+    const [tasks, adoptions] = await Promise.all([
+      this.taskModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
+      this.adoptionModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
+    ]);
+    const taskSum = tasks.reduce((sum, t) => sum + ((t as Task).progress ?? 0), 0);
+    const adoptionSum = adoptions.reduce((sum, a) => sum + ((a as Adoption).percentAdopted ?? 0), 0);
+    const totalItems = tasks.length + adoptions.length;
+    const progress = totalItems === 0 ? 0 : Math.round((taskSum + adoptionSum) / totalItems);
+    await this.initiativeService.updateProgress(initiativeId, organizationId, progress);
   }
 }

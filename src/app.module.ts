@@ -10,6 +10,7 @@ import { StakeholderModule } from './features/stakeholder/stakeholder.module';
 import { CommunicationModule } from './features/communication/communication.module';
 import { AdoptionModule } from './features/adoption/adoption.module';
 import { RiskModule } from './features/risk/risk.module';
+import { ActivityModule } from './features/activity/activity.module';
 
 const DEFAULT_MONGO_URI =
   'mongodb+srv://navi:navibackend@cluster0.nktmmeq.mongodb.net/navi?appName=Cluster0';
@@ -33,6 +34,7 @@ const DEFAULT_MONGO_URI =
     CommunicationModule,
     AdoptionModule,
     RiskModule,
+    ActivityModule,
   ],
   providers: [],
   controllers: [],

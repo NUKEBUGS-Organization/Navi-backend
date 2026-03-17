@@ -33,6 +33,11 @@ export class Adoption {
   @Prop({ default: 0 })
   percentAdopted?: number;
 
+  /** Target adoption % for this milestone (e.g. 50 or 100). Progress is derived from linked tasks. */
+  @ApiProperty({ required: false })
+  @Prop({ default: 100 })
+  targetPercent?: number;
+
   @ApiProperty({ required: false })
   @Prop({ default: '' })
   notes?: string;

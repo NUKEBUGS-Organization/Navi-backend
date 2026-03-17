@@ -24,6 +24,7 @@ export class AdoptionService {
       targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
       status: (dto.status as Adoption['status']) ?? 'Not Started',
       percentAdopted: dto.percentAdopted ?? 0,
+      targetPercent: dto.targetPercent ?? 100,
       notes: dto.notes?.trim() ?? '',
     });
     return doc.toObject?.() ?? (doc as unknown as Adoption);
@@ -58,6 +59,7 @@ export class AdoptionService {
     if (dto.targetDate !== undefined) updates.targetDate = dto.targetDate ? new Date(dto.targetDate) : null;
     if (dto.status !== undefined) updates.status = dto.status;
     if (dto.percentAdopted !== undefined) updates.percentAdopted = Math.min(100, Math.max(0, dto.percentAdopted));
+    if (dto.targetPercent !== undefined) updates.targetPercent = Math.min(100, Math.max(0, dto.targetPercent));
     if (dto.notes !== undefined) updates.notes = dto.notes.trim();
     if (dto.initiativeId !== undefined) updates.initiativeId = new mongoose.Types.ObjectId(dto.initiativeId);
     const doc = await this.model

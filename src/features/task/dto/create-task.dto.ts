@@ -43,4 +43,9 @@ export class CreateTaskDto {
   @ApiProperty({ required: false })
   @IsOptional()
   isBlocked?: boolean;
+
+  @ApiProperty({ required: false, description: 'Adoption milestone this task contributes to; completion drives milestone progress.' })
+  @IsOptional()
+  @IsString()
+  adoptionMilestoneId?: string;
 }
