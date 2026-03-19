@@ -7,6 +7,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { InitiativeService } from '../initiative/initiative.service';
 import { Adoption } from '../adoption/adoption.entity';
+import { KudosService } from '../kudos/kudos.service';
 
 function statusFromProgress(progress: number): Task['status'] {
   if (progress >= 100) return 'Completed';
@@ -20,6 +21,7 @@ export class TaskService {
     @InjectModel('Task') private readonly taskModel: Model<Task>,
     @InjectModel('Adoption') private readonly adoptionModel: Model<Adoption>,
     private readonly initiativeService: InitiativeService,
+    private readonly kudosService: KudosService,
   ) {}
 
   async create(dto: CreateTaskDto, organizationId: string): Promise<Task> {
@@ -111,6 +113,7 @@ export class TaskService {
   ): Promise<Task | null> {
     const task = await this.findOne(id, organizationId);
     if (!task) return null;
+    const previousProgress = (task as Task).progress ?? 0;
     const initiativeIdStr = (task.initiativeId as mongoose.Types.ObjectId)?.toString?.() ?? (task.initiativeId as unknown as string);
     const initiative = await this.initiativeService.findOne(initiativeIdStr, organizationId);
     if (!initiative || initiative.status === 'DRAFT') {
@@ -137,6 +140,21 @@ export class TaskService {
         .findOneAndUpdate({ _id: taskId, organizationId: orgId }, { $set: updates }, { new: true })
         .lean()
         .exec();
+
+      const nextProgress = updates.progress ?? previousProgress;
+      const wasCompletedBefore = previousProgress >= 100;
+      const isCompletedNow = nextProgress >= 100;
+      if (!wasCompletedBefore && isCompletedNow) {
+        // System kudos for completing a task.
+        await this.kudosService.createSystemKudosForTaskCompletion({
+          initiativeId: initiativeIdStr,
+          organizationId,
+          taskId: String(id),
+          employeeId: String(userId),
+          taskTitle: (task as Task).title,
+        });
+      }
+
       const initiativeId = (task.initiativeId as mongoose.Types.ObjectId)?.toString?.() ?? (task.initiativeId as unknown as string);
       const oldAdoptionId = (task as Task & { adoptionMilestoneId?: mongoose.Types.ObjectId }).adoptionMilestoneId?.toString?.();
       if (oldAdoptionId) await this.recalcAdoptionProgress(oldAdoptionId, organizationId);

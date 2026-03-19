@@ -11,6 +11,8 @@ import { CommunicationModule } from './features/communication/communication.modu
 import { AdoptionModule } from './features/adoption/adoption.module';
 import { RiskModule } from './features/risk/risk.module';
 import { ActivityModule } from './features/activity/activity.module';
+import { KudosModule } from './features/kudos/kudos.module';
+import { KnowledgeHubModule } from './features/knowledge-hub/knowledge-hub.module';
 
 const DEFAULT_MONGO_URI =
   'mongodb+srv://navi:navibackend@cluster0.nktmmeq.mongodb.net/navi?appName=Cluster0';
@@ -35,6 +37,8 @@ const DEFAULT_MONGO_URI =
     AdoptionModule,
     RiskModule,
     ActivityModule,
+    KudosModule,
+    KnowledgeHubModule,
   ],
   providers: [],
   controllers: [],

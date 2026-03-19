@@ -32,6 +32,6 @@ export class ActivityController {
       throw new HttpException('initiativeId is required.', HttpStatus.BAD_REQUEST);
     }
     const orgId = this.getOrgId(user);
-    return this.activityService.getActivity(initiativeId.trim(), orgId);
+    return this.activityService.getActivity(initiativeId.trim(), orgId, user);
   }
 }

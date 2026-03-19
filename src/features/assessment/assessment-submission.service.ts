@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import { AssessmentSubmission } from './assessment-submission.entity';
 import { Assessment } from './assessment.entity';
 import { InitiativeService } from '../initiative/initiative.service';
+import { KudosService } from '../kudos/kudos.service';
 
 @Injectable()
 export class AssessmentSubmissionService {
@@ -12,6 +13,7 @@ export class AssessmentSubmissionService {
     @InjectModel('AssessmentSubmission') private readonly submissionModel: Model<AssessmentSubmission>,
     @InjectModel('Assessment') private readonly assessmentModel: Model<Assessment>,
     private readonly initiativeService: InitiativeService,
+    private readonly kudosService: KudosService,
   ) {}
 
   async create(
@@ -49,6 +51,16 @@ export class AssessmentSubmissionService {
       overallScore,
       riskLevel: riskLevel ?? '',
     });
+
+    // System kudos for employee assessment submissions.
+    await this.kudosService.createSystemKudosForAssessmentSubmission({
+      initiativeId: initId,
+      organizationId,
+      assessmentSubmissionId: (doc._id as any)?.toString?.() ?? String(doc._id),
+      employeeId: userId,
+      assessmentTitle: (assessment as any).name ?? 'Assessment',
+    });
+
     return doc.toObject?.() ?? (doc as unknown as AssessmentSubmission);
   }
 

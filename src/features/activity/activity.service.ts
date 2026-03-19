@@ -6,6 +6,7 @@ import { AdoptionService } from '../adoption/adoption.service';
 import { Task } from '../task/task.entity';
 import type { TaskCommentDto } from '../task/task-comment.service';
 import { Adoption } from '../adoption/adoption.entity';
+import { User, UserRole } from '../auth/user.entity';
 
 export type ActivityItemType = 'task_created' | 'task_updated' | 'comment' | 'adoption_milestone';
 
@@ -32,9 +33,12 @@ export class ActivityService {
     private readonly adoptionService: AdoptionService,
   ) {}
 
-  async getActivity(initiativeId: string, organizationId: string): Promise<ActivityItem[]> {
+  async getActivity(initiativeId: string, organizationId: string, user?: Partial<User>): Promise<ActivityItem[]> {
     const initiative = await this.initiativeService.findOne(initiativeId, organizationId);
     if (!initiative) return [];
+
+    const isEmployee = user?.role === UserRole.EMPLOYEE;
+    const userIdStr = user?._id ? (user._id as unknown as { toString?: () => string }).toString?.() ?? String(user._id) : undefined;
 
     const [tasks, comments, adoptions] = await Promise.all([
       this.taskService.findByInitiative(initiativeId, organizationId),
@@ -52,9 +56,29 @@ export class ActivityService {
       if (id) taskById.set(id, t);
     });
 
+    const tasksForEmployee =
+      isEmployee && userIdStr ? tasks.filter((t) => {
+        const assigneeId = (t as unknown as { assigneeId?: { toString?: () => string } | unknown }).assigneeId;
+        const assigneeIdStr = assigneeId ? (assigneeId as { toString?: () => string }).toString?.() ?? String(assigneeId) : "";
+        return assigneeIdStr === userIdStr;
+      }) : tasks;
+
+    const commentsForEmployee =
+      isEmployee && userIdStr ? comments.filter((c) => String(c.userId) === userIdStr) : comments;
+
+    const allowedAdoptionMilestoneIds =
+      isEmployee && userIdStr
+        ? new Set(
+            tasksForEmployee
+              .map((t) => (t as unknown as { adoptionMilestoneId?: { toString?: () => string } | unknown }).adoptionMilestoneId)
+              .filter(Boolean)
+              .map((id) => (id as { toString?: () => string }).toString?.() ?? String(id)),
+          )
+        : null;
+
     const items: ActivityItem[] = [];
 
-    for (const task of tasks) {
+    for (const task of tasksForEmployee) {
       const tid = toTaskId(task);
       const title = (task as Task).title ?? 'Task';
       const createdAt = (task as Task & { createdAt?: Date }).createdAt;
@@ -79,7 +103,7 @@ export class ActivityService {
       }
     }
 
-    for (const c of comments) {
+    for (const c of commentsForEmployee) {
       const comment = c as TaskCommentDto;
       const task = taskById.get(comment.taskId);
       const taskTitle = task ? (task as Task).title : 'Task';
@@ -95,6 +119,11 @@ export class ActivityService {
 
     for (const a of adoptions) {
       const adoption = a as Adoption & { createdAt?: Date };
+      if (allowedAdoptionMilestoneIds) {
+        const adoptionId = (adoption as unknown as { _id?: { toString?: () => string } | unknown })._id;
+        const adoptionIdStr = adoptionId ? (adoptionId as { toString?: () => string }).toString?.() ?? String(adoptionId) : "";
+        if (adoptionIdStr && !allowedAdoptionMilestoneIds.has(adoptionIdStr)) continue;
+      }
       if (adoption.createdAt) {
         items.push({
           type: 'adoption_milestone',

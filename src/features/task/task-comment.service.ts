@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import { TaskComment } from './task-comment.entity';
 import { CreateTaskCommentDto } from './dto/create-task-comment.dto';
 import { TaskService } from './task.service';
+import { KudosService } from '../kudos/kudos.service';
 
 export interface TaskCommentDto {
   _id: string;
@@ -21,6 +22,7 @@ export class TaskCommentService {
   constructor(
     @InjectModel('TaskComment') private readonly commentModel: Model<TaskComment>,
     private readonly taskService: TaskService,
+    private readonly kudosService: KudosService,
   ) {}
 
   async create(
@@ -40,6 +42,18 @@ export class TaskCommentService {
       userId: userObjId,
       content: dto.content.trim(),
     });
+
+    // System kudos for employee comment contributions.
+    await this.kudosService.createSystemKudosForTaskComment({
+      initiativeId: (task.initiativeId as any)?.toString?.() ?? String(task.initiativeId),
+      organizationId,
+      taskId,
+      commentId: (doc._id as any)?.toString?.() ?? String(doc._id),
+      employeeId: userId,
+      taskTitle: (task as any).title ?? 'Task',
+      commentPreview: dto.content.trim().slice(0, 80) || undefined,
+    });
+
     const raw = doc.toObject ? doc.toObject() : (doc as unknown as TaskComment & { createdAt: Date; updatedAt: Date });
     return {
       _id: (raw._id as mongoose.Types.ObjectId).toString(),

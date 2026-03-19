@@ -8,11 +8,13 @@ import { AssessmentController } from './assessment.controller';
 import { AssessmentSubmissionController } from './assessment-submission.controller';
 import { AssessmentService } from './assessment.service';
 import { AssessmentSubmissionService } from './assessment-submission.service';
+import { KudosModule } from '../kudos/kudos.module';
 
 @Module({
   imports: [
     AuthModule,
     InitiativeModule,
+    KudosModule,
     MongooseModule.forFeature([
       { name: 'Assessment', schema: AssessmentSchema },
       { name: 'AssessmentSubmission', schema: AssessmentSubmissionSchema },

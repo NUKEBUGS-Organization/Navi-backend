@@ -9,6 +9,11 @@ const GoalSchema = {
   metric: { type: String, default: '' },
 };
 
+const FaqSchema = {
+  question: { type: String, default: '' },
+  answer: { type: String, default: '' },
+};
+
 @Schema({ timestamps: true })
 export class Initiative {
   @ApiProperty({ type: String })
@@ -53,6 +58,10 @@ export class Initiative {
   @ApiProperty({ type: [Object] })
   @Prop({ type: [GoalSchema], default: [] })
   goals: { goal?: string; metric?: string }[];
+
+  @ApiProperty({ type: [Object], required: false })
+  @Prop({ type: [FaqSchema], default: [] })
+  faqs: { question?: string; answer?: string }[];
 
   @ApiProperty()
   createdAt: Date;

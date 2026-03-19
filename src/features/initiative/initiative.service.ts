@@ -42,6 +42,7 @@ export class InitiativeService {
       status: (dto.status as Initiative['status']) ?? 'DRAFT',
       departments: dto.departments ?? [],
       goals: dto.goals ?? [],
+      faqs: dto.faqs ?? [],
       progress: dto.progress ?? 0,
     });
     return created.toObject ? created.toObject() : (created as unknown as Initiative);

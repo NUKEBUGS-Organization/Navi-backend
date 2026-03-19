@@ -1,5 +1,25 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+
+export class InitiativeFaqDto {
+  @ApiProperty()
+  @IsString()
+  question: string;
+
+  @ApiProperty()
+  @IsString()
+  answer: string;
+}
 
 export class InitiativeGoalDto {
   @ApiProperty({ required: false })
@@ -61,4 +81,11 @@ export class CreateInitiativeDto {
   @IsOptional()
   @IsArray()
   goals?: { goal?: string; metric?: string }[];
+
+  @ApiProperty({ type: [InitiativeFaqDto], required: false })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InitiativeFaqDto)
+  faqs?: InitiativeFaqDto[];
 }
