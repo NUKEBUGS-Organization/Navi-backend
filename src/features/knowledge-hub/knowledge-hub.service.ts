@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createReadStream } from 'fs';
 import { KnowledgeEntry } from './knowledge-entry.entity';
+import { KnowledgeSolutionVote } from './knowledge-solution-vote.entity';
 import { InitiativeService } from '../initiative/initiative.service';
 import { User } from '../auth/user.entity';
 
@@ -21,6 +22,8 @@ export class KnowledgeHubService implements OnModuleInit {
 
   constructor(
     @InjectModel('KnowledgeEntry') private readonly entryModel: Model<KnowledgeEntry>,
+    @InjectModel('KnowledgeSolutionVote')
+    private readonly voteModel: Model<KnowledgeSolutionVote>,
     private readonly initiativeService: InitiativeService,
   ) {}
 
@@ -60,11 +63,38 @@ export class KnowledgeHubService implements OnModuleInit {
     if (!orgOid || !iniOid) {
       throw new HttpException('Invalid id', HttpStatus.BAD_REQUEST);
     }
-    return this.entryModel
+    const entries = await this.entryModel
       .find({ organizationId: orgOid, initiativeId: iniOid })
       .sort({ createdAt: -1 })
       .lean()
       .exec();
+
+    const uid = user._id;
+    if (!uid) return entries;
+
+    const userOid =
+      typeof uid === 'string' ? new mongoose.Types.ObjectId(uid) : (uid as mongoose.Types.ObjectId);
+
+    const entryIds = entries.map((e) => String(e._id));
+    if (entryIds.length === 0) return entries;
+
+    const votes = await this.voteModel
+      .find({
+        organizationId: orgOid,
+        entryId: { $in: entryIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        userId: userOid,
+      })
+      .lean()
+      .exec();
+
+    const voteByEntryId = new Map<string, 'up' | 'down'>(
+      votes.map((v) => [String(v.entryId), v.direction]),
+    );
+
+    return entries.map((e) => ({
+      ...e,
+      mySolutionVote: voteByEntryId.get(String(e._id)) ?? undefined,
+    }));
   }
 
   async addText(user: Partial<User>, initiativeId: string, text: string) {
@@ -87,6 +117,132 @@ export class KnowledgeHubService implements OnModuleInit {
       textBody: text.trim(),
     });
     return created.toObject ? created.toObject() : created;
+  }
+
+  async voteSolution(
+    user: Partial<User>,
+    entryId: string,
+    direction: 'up' | 'down',
+  ) {
+    const orgIdStr = this.getOrgId(user);
+    const orgOid = this.toObjectId(orgIdStr);
+    const eid = this.toObjectId(entryId);
+    if (!orgOid || !eid) {
+      throw new HttpException('Invalid id', HttpStatus.BAD_REQUEST);
+    }
+
+    const uid = user._id;
+    if (!uid) throw new HttpException('Invalid user', HttpStatus.BAD_REQUEST);
+    const userOid =
+      typeof uid === 'string' ? new mongoose.Types.ObjectId(uid) : (uid as mongoose.Types.ObjectId);
+
+    const existing = await this.voteModel
+      .findOne({ organizationId: orgOid, entryId: eid, userId: userOid })
+      .lean()
+      .exec();
+
+    // One vote per user per contribution:
+    // - Clicking the same direction again rolls back (removes the vote + decrements).
+    // - Clicking the opposite direction switches the vote (adjusts counters).
+    if (existing) {
+      const existingDir = existing.direction;
+      const entry = await this.entryModel
+        .findOne({ _id: eid, organizationId: orgOid, kind: 'text' })
+        .lean()
+        .exec();
+      if (!entry) throw new HttpException('Entry not found.', HttpStatus.NOT_FOUND);
+
+      if (existingDir === direction) {
+        // Rollback
+        await this.voteModel.deleteOne({ _id: existing._id });
+        const inc =
+          direction === 'up' ? { solutionUpvotes: -1 } : { solutionDownvotes: -1 };
+        const updated = await this.entryModel
+          .findOneAndUpdate(
+            { _id: eid, organizationId: orgOid, kind: 'text' },
+            { $inc: inc },
+            { new: true },
+          )
+          .lean()
+          .exec();
+        if (!updated) throw new HttpException('Entry not found.', HttpStatus.NOT_FOUND);
+        return { ...updated, mySolutionVote: undefined };
+      }
+
+      // Switch vote direction
+      await this.voteModel.updateOne({ _id: existing._id }, { direction });
+      const inc =
+        existingDir === 'up' && direction === 'down'
+          ? { solutionUpvotes: -1, solutionDownvotes: 1 }
+          : { solutionUpvotes: 1, solutionDownvotes: -1 };
+
+      const updated = await this.entryModel
+        .findOneAndUpdate(
+          { _id: eid, organizationId: orgOid, kind: 'text' },
+          { $inc: inc },
+          { new: true },
+        )
+        .lean()
+        .exec();
+      if (!updated) throw new HttpException('Entry not found.', HttpStatus.NOT_FOUND);
+      return { ...updated, mySolutionVote: direction };
+    }
+
+    await this.voteModel.create({
+      organizationId: orgOid,
+      entryId: eid,
+      userId: userOid,
+      direction,
+    });
+
+    const inc =
+      direction === 'up' ? { solutionUpvotes: 1 } : { solutionDownvotes: 1 };
+
+    const updated = await this.entryModel
+      .findOneAndUpdate(
+        { _id: eid, organizationId: orgOid, kind: 'text' },
+        { $inc: inc },
+        { new: true },
+      )
+      .lean()
+      .exec();
+
+    if (!updated) throw new HttpException('Entry not found.', HttpStatus.NOT_FOUND);
+
+    return { ...updated, mySolutionVote: direction };
+  }
+
+  async deleteEntry(user: Partial<User>, entryId: string) {
+    const orgIdStr = this.getOrgId(user);
+    const orgOid = this.toObjectId(orgIdStr);
+    const eid = this.toObjectId(entryId);
+    if (!orgOid || !eid) {
+      throw new HttpException('Invalid id', HttpStatus.BAD_REQUEST);
+    }
+
+    const entry = await this.entryModel
+      .findOne({ _id: eid, organizationId: orgOid })
+      .lean()
+      .exec();
+    if (!entry) {
+      throw new HttpException('Entry not found.', HttpStatus.NOT_FOUND);
+    }
+
+    if (entry.kind === 'file' && entry.storedFileName) {
+      const fullPath = path.join(this.uploadDir, entry.storedFileName);
+      if (fs.existsSync(fullPath)) {
+        try {
+          fs.unlinkSync(fullPath);
+        } catch {
+          // ignore fs deletion errors; db record will be removed anyway
+        }
+      }
+    }
+
+    await this.voteModel.deleteMany({ organizationId: orgOid, entryId: eid }).exec();
+    await this.entryModel.deleteOne({ _id: eid, organizationId: orgOid }).exec();
+
+    return { message: 'Entry deleted.' };
   }
 
   async addFile(

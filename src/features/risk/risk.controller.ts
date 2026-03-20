@@ -33,7 +33,7 @@ export class RiskController {
   @Get('summary')
   async summary(@CurrentUser() user: Partial<User>) {
     const orgId = getOrgId(user);
-    if (!orgId) return { high: 0, critical: 0, open: 0 };
+    if (!orgId) return { high: 0, medium: 0, low: 0, open: 0 };
     return this.service.countBySeverity(orgId);
   }
 

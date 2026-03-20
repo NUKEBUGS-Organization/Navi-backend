@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -21,6 +22,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User, UserRole } from '../auth/user.entity';
 import { KnowledgeHubService } from './knowledge-hub.service';
 import { CreateKnowledgeTextDto } from './dto/create-knowledge-text.dto';
+import { VoteSolutionDto } from './dto/vote-solution.dto';
 
 function knowledgeUploadDir(): string {
   const dir = join(process.cwd(), 'uploads', 'knowledge');
@@ -87,5 +89,23 @@ export class KnowledgeHubController {
   @Get('entries/:entryId/file')
   async download(@CurrentUser() user: Partial<User>, @Param('entryId') entryId: string) {
     return this.knowledgeHubService.getFileForDownload(user, entryId);
+  }
+
+  @Post('entries/:entryId/vote-solution')
+  async voteSolution(
+    @CurrentUser() user: Partial<User>,
+    @Param('entryId') entryId: string,
+    @Body() dto: VoteSolutionDto,
+  ) {
+    return this.knowledgeHubService.voteSolution(user, entryId, dto.direction);
+  }
+
+  @Delete('entries/:entryId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async deleteEntry(
+    @CurrentUser() user: Partial<User>,
+    @Param('entryId') entryId: string,
+  ) {
+    return this.knowledgeHubService.deleteEntry(user, entryId);
   }
 }

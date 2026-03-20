@@ -26,6 +26,7 @@ export class AdoptionService {
       percentAdopted: dto.percentAdopted ?? 0,
       targetPercent: dto.targetPercent ?? 100,
       notes: dto.notes?.trim() ?? '',
+      visibleToEmployees: dto.visibleToEmployees ?? true,
     });
     return doc.toObject?.() ?? (doc as unknown as Adoption);
   }
@@ -61,6 +62,7 @@ export class AdoptionService {
     if (dto.percentAdopted !== undefined) updates.percentAdopted = Math.min(100, Math.max(0, dto.percentAdopted));
     if (dto.targetPercent !== undefined) updates.targetPercent = Math.min(100, Math.max(0, dto.targetPercent));
     if (dto.notes !== undefined) updates.notes = dto.notes.trim();
+    if (dto.visibleToEmployees !== undefined) updates.visibleToEmployees = dto.visibleToEmployees;
     if (dto.initiativeId !== undefined) updates.initiativeId = new mongoose.Types.ObjectId(dto.initiativeId);
     const doc = await this.model
       .findOneAndUpdate(

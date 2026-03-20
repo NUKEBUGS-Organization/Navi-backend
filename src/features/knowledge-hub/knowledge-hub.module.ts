@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { InitiativeModule } from '../initiative/initiative.module';
 import { KnowledgeEntrySchema } from './knowledge-entry.entity';
+import { KnowledgeSolutionVoteSchema } from './knowledge-solution-vote.entity';
 import { KnowledgeHubController } from './knowledge-hub.controller';
 import { KnowledgeHubService } from './knowledge-hub.service';
 
@@ -10,7 +11,10 @@ import { KnowledgeHubService } from './knowledge-hub.service';
   imports: [
     AuthModule,
     InitiativeModule,
-    MongooseModule.forFeature([{ name: 'KnowledgeEntry', schema: KnowledgeEntrySchema }]),
+    MongooseModule.forFeature([
+      { name: 'KnowledgeEntry', schema: KnowledgeEntrySchema },
+      { name: 'KnowledgeSolutionVote', schema: KnowledgeSolutionVoteSchema },
+    ]),
   ],
   controllers: [KnowledgeHubController],
   providers: [KnowledgeHubService],

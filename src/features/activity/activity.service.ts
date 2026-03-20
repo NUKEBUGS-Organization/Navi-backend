@@ -119,6 +119,7 @@ export class ActivityService {
 
     for (const a of adoptions) {
       const adoption = a as Adoption & { createdAt?: Date };
+      if (isEmployee && adoption.visibleToEmployees === false) continue;
       if (allowedAdoptionMilestoneIds) {
         const adoptionId = (adoption as unknown as { _id?: { toString?: () => string } | unknown })._id;
         const adoptionIdStr = adoptionId ? (adoptionId as { toString?: () => string }).toString?.() ?? String(adoptionId) : "";

@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsIn,
   Max,
   Min,
   ValidateNested,
@@ -76,6 +77,54 @@ export class CreateInitiativeDto {
   @IsOptional()
   @IsString()
   readiness?: string;
+
+  @ApiProperty({
+    required: false,
+    enum: [
+      'Tech/Digital',
+      'ERP system change',
+      'Cultural transformation',
+      'Department restructuring',
+      'Full company restructuring',
+      'Merger/acquisition',
+      'Other',
+    ],
+  })
+  @IsOptional()
+  @IsIn([
+    'Tech/Digital',
+    'ERP system change',
+    'Cultural transformation',
+    'Department restructuring',
+    'Full company restructuring',
+    'Merger/acquisition',
+    'Other',
+  ])
+  changeType?: string;
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  raciAccountableIds?: string[];
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  raciResponsibleIds?: string[];
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  raciConsultedIds?: string[];
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  raciInformedIds?: string[];
 
   @ApiProperty({ type: [InitiativeGoalDto], required: false })
   @IsOptional()

@@ -133,15 +133,24 @@ export class RiskService {
   }
 
   /** Count by severity for dashboard. */
-  async countBySeverity(organizationId: string): Promise<{ high: number; critical: number; open: number }> {
-    const [high, critical, open] = await Promise.all([
-      this.model.countDocuments({ organizationId: new mongoose.Types.ObjectId(organizationId), severity: 'High' }).exec(),
-      this.model.countDocuments({ organizationId: new mongoose.Types.ObjectId(organizationId), severity: 'Critical' }).exec(),
-      this.model.countDocuments({
-        organizationId: new mongoose.Types.ObjectId(organizationId),
-        status: { $in: ['Open', 'Mitigating'] },
-      }).exec(),
+  async countBySeverity(
+    organizationId: string,
+  ): Promise<{ high: number; medium: number; low: number; open: number }> {
+    // Map `Critical` into `High` for the dashboard cards.
+    const orgOid = new mongoose.Types.ObjectId(organizationId);
+    const [high, medium, low, open] = await Promise.all([
+      this.model
+        .countDocuments({ organizationId: orgOid, severity: { $in: ['High', 'Critical'] } })
+        .exec(),
+      this.model.countDocuments({ organizationId: orgOid, severity: 'Medium' }).exec(),
+      this.model.countDocuments({ organizationId: orgOid, severity: 'Low' }).exec(),
+      this.model
+        .countDocuments({
+          organizationId: orgOid,
+          status: { $in: ['Open', 'Mitigating'] },
+        })
+        .exec(),
     ]);
-    return { high, critical, open };
+    return { high, medium, low, open };
   }
 }

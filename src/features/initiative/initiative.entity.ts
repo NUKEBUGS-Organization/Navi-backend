@@ -4,6 +4,15 @@ import mongoose from 'mongoose';
 
 export type InitiativeStatus = 'ACTIVE' | 'DRAFT' | 'PLANNING';
 
+export type ChangeType =
+  | 'Tech/Digital'
+  | 'ERP system change'
+  | 'Cultural transformation'
+  | 'Department restructuring'
+  | 'Full company restructuring'
+  | 'Merger/acquisition'
+  | 'Other';
+
 const GoalSchema = {
   goal: { type: String, default: '' },
   metric: { type: String, default: '' },
@@ -54,6 +63,27 @@ export class Initiative {
   @ApiProperty({ required: false })
   @Prop({ default: '' })
   readiness?: string;
+
+  @ApiProperty({ required: false, enum: ['Tech/Digital', 'ERP system change', 'Cultural transformation', 'Department restructuring', 'Full company restructuring', 'Merger/acquisition', 'Other'] })
+  @Prop({ type: String, default: 'Other' })
+  changeType?: ChangeType;
+
+  // RACI (strings are internal collaborator user IDs)
+  @ApiProperty({ required: false, type: [String] })
+  @Prop({ type: [String], default: [] })
+  raciAccountableIds: string[];
+
+  @ApiProperty({ required: false, type: [String] })
+  @Prop({ type: [String], default: [] })
+  raciResponsibleIds: string[];
+
+  @ApiProperty({ required: false, type: [String] })
+  @Prop({ type: [String], default: [] })
+  raciConsultedIds: string[];
+
+  @ApiProperty({ required: false, type: [String] })
+  @Prop({ type: [String], default: [] })
+  raciInformedIds: string[];
 
   @ApiProperty({ type: [Object] })
   @Prop({ type: [GoalSchema], default: [] })

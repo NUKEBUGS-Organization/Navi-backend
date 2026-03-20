@@ -42,6 +42,11 @@ export class Adoption {
   @Prop({ default: '' })
   notes?: string;
 
+  /** When false, employees won't see this adoption milestone in their roadmap/activity feed. */
+  @ApiProperty({ required: false, default: true })
+  @Prop({ default: true })
+  visibleToEmployees?: boolean;
+
   @ApiProperty()
   createdAt: Date;
 

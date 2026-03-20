@@ -46,6 +46,14 @@ export class KnowledgeEntry {
   @Prop({ type: String, required: false })
   mimeType?: string;
 
+  @ApiProperty({ required: false, default: 0 })
+  @Prop({ type: Number, required: false, default: 0 })
+  solutionUpvotes?: number;
+
+  @ApiProperty({ required: false, default: 0 })
+  @Prop({ type: Number, required: false, default: 0 })
+  solutionDownvotes?: number;
+
   createdAt: Date;
   updatedAt: Date;
 }
