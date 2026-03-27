@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  forwardRef,
   Get,
   HttpException,
   HttpStatus,
+  Inject,
   Param,
   Patch,
   Post,
@@ -18,6 +20,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User, UserRole } from '../auth/user.entity';
+import { TaskService } from '../task/task.service';
 
 @ApiTags('initiatives')
 @Controller('initiatives')
@@ -25,7 +28,11 @@ import { User, UserRole } from '../auth/user.entity';
 @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.EMPLOYEE)
 @ApiBearerAuth()
 export class InitiativeController {
-  constructor(private readonly initiativeService: InitiativeService) {}
+  constructor(
+    private readonly initiativeService: InitiativeService,
+    @Inject(forwardRef(() => TaskService))
+    private readonly taskService: TaskService,
+  ) {}
 
   private getOrgId(user: Partial<User>): string {
     const orgId = user.organizationId;
@@ -41,12 +48,14 @@ export class InitiativeController {
   @Get()
   async list(@CurrentUser() user: Partial<User>) {
     const orgId = this.getOrgId(user);
+    await this.taskService.refreshOrganizationInitiativeProgress(orgId);
     return this.initiativeService.findAllByOrganization(orgId);
   }
 
   @Get(':id')
   async getOne(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
     const orgId = this.getOrgId(user);
+    await this.taskService.refreshInitiativeProgress(id, orgId);
     const initiative = await this.initiativeService.findOne(id, orgId);
     if (!initiative) {
       throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);
@@ -61,10 +70,10 @@ export class InitiativeController {
   ) {
     const orgId = this.getOrgId(user);
     const role = (user as { role?: UserRole }).role;
-    // Managers can create initiatives but they always start as DRAFT until an admin approves.
+    // Managers can create initiatives but they always start as WAITING_FOR_APPROVAL until an admin approves.
     const payload: CreateInitiativeDto =
       role === UserRole.MANAGER
-        ? ({ ...dto, status: 'DRAFT' } as CreateInitiativeDto)
+        ? ({ ...dto, status: 'WAITING_FOR_APPROVAL' } as CreateInitiativeDto)
         : dto;
     return this.initiativeService.create(payload, orgId);
   }
@@ -77,11 +86,11 @@ export class InitiativeController {
   ) {
     const orgId = this.getOrgId(user);
     const role = (user as { role?: UserRole }).role;
-    // Managers cannot move initiatives out of DRAFT; only admins can approve (set ACTIVE/PLANNING).
-    const payload: UpdateInitiativeDto =
-      role === UserRole.MANAGER && dto.status && dto.status !== 'DRAFT'
-        ? ({ ...dto, status: 'DRAFT' } as UpdateInitiativeDto)
-        : dto;
+    // Managers cannot change initiative status; only admins can approve (ACTIVE) or complete (COMPLETED).
+    const payload: UpdateInitiativeDto = { ...dto };
+    if (role === UserRole.MANAGER) {
+      delete (payload as unknown as { status?: unknown }).status;
+    }
     const updated = await this.initiativeService.update(id, payload, orgId);
     if (!updated) {
       throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);

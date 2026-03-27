@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
+import { TaskModule } from '../task/task.module';
 import { InitiativeSchema } from './initiative.entity';
 import { InitiativeController } from './initiative.controller';
 import { InitiativeService } from './initiative.service';
@@ -8,6 +9,7 @@ import { InitiativeService } from './initiative.service';
 @Module({
   imports: [
     AuthModule,
+    forwardRef(() => TaskModule),
     MongooseModule.forFeature([{ name: 'Initiative', schema: InitiativeSchema }]),
   ],
   controllers: [InitiativeController],

@@ -14,7 +14,7 @@ import { createReadStream } from 'fs';
 import { KnowledgeEntry } from './knowledge-entry.entity';
 import { KnowledgeSolutionVote } from './knowledge-solution-vote.entity';
 import { InitiativeService } from '../initiative/initiative.service';
-import { User } from '../auth/user.entity';
+import { User, UserRole } from '../auth/user.entity';
 
 @Injectable()
 export class KnowledgeHubService implements OnModuleInit {
@@ -119,6 +119,51 @@ export class KnowledgeHubService implements OnModuleInit {
     return created.toObject ? created.toObject() : created;
   }
 
+  async updateTextEntry(user: Partial<User>, entryId: string, text: string) {
+    const orgIdStr = this.getOrgId(user);
+    const orgOid = this.toObjectId(orgIdStr);
+    const eid = this.toObjectId(entryId);
+    if (!orgOid || !eid) {
+      throw new HttpException('Invalid id', HttpStatus.BAD_REQUEST);
+    }
+
+    const entry = await this.entryModel
+      .findOne({ _id: eid, organizationId: orgOid, kind: 'text' })
+      .lean()
+      .exec();
+    if (!entry) {
+      throw new HttpException('Text entry not found.', HttpStatus.NOT_FOUND);
+    }
+
+    const uid = user._id;
+    const userIdStr =
+      uid == null
+        ? ''
+        : typeof uid === 'string'
+          ? uid
+          : (uid as { toString?: () => string }).toString?.() ?? String(uid);
+    const authorId = (entry as unknown as { authorId?: { toString?: () => string } }).authorId;
+    const authorIdStr = authorId?.toString?.() ?? '';
+    const canManage = user.role === UserRole.ADMIN || user.role === UserRole.MANAGER;
+    const isAuthor = Boolean(userIdStr && authorIdStr && userIdStr === authorIdStr);
+    if (!canManage && !isAuthor) {
+      throw new HttpException('You cannot edit this contribution.', HttpStatus.FORBIDDEN);
+    }
+
+    const updated = await this.entryModel
+      .findOneAndUpdate(
+        { _id: eid, organizationId: orgOid, kind: 'text' },
+        { $set: { textBody: text.trim() } },
+        { new: true },
+      )
+      .lean()
+      .exec();
+    if (!updated) {
+      throw new HttpException('Text entry not found.', HttpStatus.NOT_FOUND);
+    }
+    return updated;
+  }
+
   async voteSolution(
     user: Partial<User>,
     entryId: string,
@@ -136,6 +181,18 @@ export class KnowledgeHubService implements OnModuleInit {
     const userOid =
       typeof uid === 'string' ? new mongoose.Types.ObjectId(uid) : (uid as mongoose.Types.ObjectId);
 
+    const entryForVote = await this.entryModel
+      .findOne({ _id: eid, organizationId: orgOid, kind: 'text' })
+      .lean()
+      .exec();
+    if (!entryForVote) throw new HttpException('Entry not found.', HttpStatus.NOT_FOUND);
+
+    const authorId = (entryForVote as unknown as { authorId?: { toString?: () => string } }).authorId;
+    const authorIdStr = authorId?.toString?.() ?? '';
+    if (authorIdStr && authorIdStr === userOid.toString()) {
+      throw new HttpException('You cannot vote on your own contribution.', HttpStatus.FORBIDDEN);
+    }
+
     const existing = await this.voteModel
       .findOne({ organizationId: orgOid, entryId: eid, userId: userOid })
       .lean()
@@ -146,12 +203,6 @@ export class KnowledgeHubService implements OnModuleInit {
     // - Clicking the opposite direction switches the vote (adjusts counters).
     if (existing) {
       const existingDir = existing.direction;
-      const entry = await this.entryModel
-        .findOne({ _id: eid, organizationId: orgOid, kind: 'text' })
-        .lean()
-        .exec();
-      if (!entry) throw new HttpException('Entry not found.', HttpStatus.NOT_FOUND);
-
       if (existingDir === direction) {
         // Rollback
         await this.voteModel.deleteOne({ _id: existing._id });

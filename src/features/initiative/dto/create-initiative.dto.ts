@@ -45,7 +45,7 @@ export class CreateInitiativeDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ enum: ['ACTIVE', 'DRAFT', 'PLANNING'], required: false })
+  @ApiProperty({ enum: ['DRAFT', 'WAITING_FOR_APPROVAL', 'ACTIVE', 'COMPLETED', 'PLANNING'], required: false })
   @IsOptional()
   @IsString()
   status?: string;

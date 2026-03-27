@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UploadedFile,
   UseGuards,
@@ -23,6 +24,7 @@ import { User, UserRole } from '../auth/user.entity';
 import { KnowledgeHubService } from './knowledge-hub.service';
 import { CreateKnowledgeTextDto } from './dto/create-knowledge-text.dto';
 import { VoteSolutionDto } from './dto/vote-solution.dto';
+import { UpdateKnowledgeTextDto } from './dto/update-knowledge-text.dto';
 
 function knowledgeUploadDir(): string {
   const dir = join(process.cwd(), 'uploads', 'knowledge');
@@ -98,6 +100,15 @@ export class KnowledgeHubController {
     @Body() dto: VoteSolutionDto,
   ) {
     return this.knowledgeHubService.voteSolution(user, entryId, dto.direction);
+  }
+
+  @Patch('entries/:entryId/text')
+  async updateText(
+    @CurrentUser() user: Partial<User>,
+    @Param('entryId') entryId: string,
+    @Body() dto: UpdateKnowledgeTextDto,
+  ) {
+    return this.knowledgeHubService.updateTextEntry(user, entryId, dto.text);
   }
 
   @Delete('entries/:entryId')

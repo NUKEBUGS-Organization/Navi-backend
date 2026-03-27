@@ -6,13 +6,27 @@ import { Adoption } from './adoption.entity';
 import { CreateAdoptionDto } from './dto/create-adoption.dto';
 import { UpdateAdoptionDto } from './dto/update-adoption.dto';
 import { InitiativeService } from '../initiative/initiative.service';
+import { computeInitiativeProgressPercent } from '../initiative/initiative-progress.util';
+import { Task } from '../task/task.entity';
 
 @Injectable()
 export class AdoptionService {
   constructor(
     @InjectModel('Adoption') private readonly model: Model<Adoption>,
+    @InjectModel('Task') private readonly taskModel: Model<Task>,
     private readonly initiativeService: InitiativeService,
   ) {}
+
+  private async recalcInitiativeProgress(initiativeId: string, organizationId: string): Promise<void> {
+    const initId = new mongoose.Types.ObjectId(initiativeId);
+    const orgId = new mongoose.Types.ObjectId(organizationId);
+    const [tasks, adoptions] = await Promise.all([
+      this.taskModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
+      this.model.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
+    ]);
+    const progress = computeInitiativeProgressPercent(tasks as Task[], adoptions as Adoption[]);
+    await this.initiativeService.updateProgress(initiativeId, organizationId, progress);
+  }
 
   async create(dto: CreateAdoptionDto, organizationId: string): Promise<Adoption> {
     const initiative = await this.initiativeService.findOne(dto.initiativeId, organizationId);
@@ -28,12 +42,14 @@ export class AdoptionService {
       notes: dto.notes?.trim() ?? '',
       visibleToEmployees: dto.visibleToEmployees ?? true,
     });
+    await this.recalcInitiativeProgress(dto.initiativeId, organizationId);
     return doc.toObject?.() ?? (doc as unknown as Adoption);
   }
 
   async findByInitiative(initiativeId: string, organizationId: string): Promise<Adoption[]> {
     const initiative = await this.initiativeService.findOne(initiativeId, organizationId);
     if (!initiative) return [];
+    await this.recalcInitiativeProgress(initiativeId, organizationId);
     const list = await this.model
       .find({
         initiativeId: new mongoose.Types.ObjectId(initiativeId),
@@ -72,13 +88,29 @@ export class AdoptionService {
       )
       .lean()
       .exec();
+    const initiativeIdForRecalc =
+      dto.initiativeId ??
+      ((doc as unknown as { initiativeId?: { toString?: () => string } | string })?.initiativeId
+        ? String((doc as unknown as { initiativeId?: { toString?: () => string } | string }).initiativeId)
+        : "");
+    if (initiativeIdForRecalc) {
+      await this.recalcInitiativeProgress(initiativeIdForRecalc, organizationId);
+    }
     return doc as Adoption | null;
   }
 
   async delete(id: string, organizationId: string): Promise<boolean> {
+    const existing = await this.model
+      .findOne({ _id: new mongoose.Types.ObjectId(id), organizationId: new mongoose.Types.ObjectId(organizationId) })
+      .lean()
+      .exec();
     const result = await this.model
       .deleteOne({ _id: new mongoose.Types.ObjectId(id), organizationId: new mongoose.Types.ObjectId(organizationId) })
       .exec();
-    return (result.deletedCount ?? 0) > 0;
+    const deleted = (result.deletedCount ?? 0) > 0;
+    if (deleted && existing?.initiativeId) {
+      await this.recalcInitiativeProgress(String(existing.initiativeId), organizationId);
+    }
+    return deleted;
   }
 }

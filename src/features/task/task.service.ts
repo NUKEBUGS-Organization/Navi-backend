@@ -6,6 +6,7 @@ import { Task } from './task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { InitiativeService } from '../initiative/initiative.service';
+import { computeInitiativeProgressPercent } from '../initiative/initiative-progress.util';
 import { Adoption } from '../adoption/adoption.entity';
 import { KudosService } from '../kudos/kudos.service';
 
@@ -207,7 +208,7 @@ export class TaskService {
     return true;
   }
 
-  /** Recompute adoption.percentAdopted from linked tasks: (completedCount / totalLinked) * targetPercent. */
+  /** Recompute adoption.percentAdopted from linked tasks: completed ratio (0..100). */
   private async recalcAdoptionProgress(adoptionId: string, organizationId: string): Promise<void> {
     const adoption = await this.adoptionModel
       .findOne({ _id: new mongoose.Types.ObjectId(adoptionId), organizationId: new mongoose.Types.ObjectId(organizationId) })
@@ -221,8 +222,7 @@ export class TaskService {
       .exec();
     const total = linked.length;
     const completed = linked.filter((t) => ((t as Task).progress ?? 0) >= 100).length;
-    const targetPercent = (adoption as Adoption).targetPercent ?? 100;
-    const percentAdopted = total === 0 ? 0 : Math.round((completed / total) * targetPercent);
+    const percentAdopted = total === 0 ? 0 : Math.round((completed / total) * 100);
     await this.adoptionModel
       .updateOne(
         { _id: adoptionOid, organizationId: new mongoose.Types.ObjectId(organizationId) },
@@ -231,7 +231,7 @@ export class TaskService {
       .exec();
   }
 
-  /** Initiative progress = (sum of task progress + sum of adoption percentAdopted) / (task count + adoption count). */
+  /** Recompute stored initiative progress from tasks + adoption milestones (see initiative-progress.util). */
   private async recalcInitiativeProgressWithAdoptions(initiativeId: string, organizationId: string): Promise<void> {
     const initId = new mongoose.Types.ObjectId(initiativeId);
     const orgId = new mongoose.Types.ObjectId(organizationId);
@@ -239,10 +239,26 @@ export class TaskService {
       this.taskModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
       this.adoptionModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
     ]);
-    const taskSum = tasks.reduce((sum, t) => sum + ((t as Task).progress ?? 0), 0);
-    const adoptionSum = adoptions.reduce((sum, a) => sum + ((a as Adoption).percentAdopted ?? 0), 0);
-    const totalItems = tasks.length + adoptions.length;
-    const progress = totalItems === 0 ? 0 : Math.round((taskSum + adoptionSum) / totalItems);
+    const progress = computeInitiativeProgressPercent(tasks as Task[], adoptions as Adoption[]);
     await this.initiativeService.updateProgress(initiativeId, organizationId, progress);
+  }
+
+  /** Public so initiative GET (and others) can refresh stored progress after formula changes or stale data. */
+  async refreshInitiativeProgress(initiativeId: string, organizationId: string): Promise<void> {
+    await this.recalcInitiativeProgressWithAdoptions(initiativeId, organizationId);
+  }
+
+  /** Recompute progress for all initiatives in an organization. */
+  async refreshOrganizationInitiativeProgress(organizationId: string): Promise<void> {
+    const list = await this.initiativeService.findAllByOrganization(organizationId);
+    await Promise.all(
+      (list ?? [])
+        .map((i) => {
+          const raw = i as unknown as { _id?: { toString?: () => string }; id?: string };
+          return raw._id?.toString?.() ?? raw.id ?? '';
+        })
+        .filter((id): id is string => Boolean(id))
+        .map((initiativeId) => this.recalcInitiativeProgressWithAdoptions(initiativeId, organizationId)),
+    );
   }
 }

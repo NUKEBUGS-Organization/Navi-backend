@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { InitiativeModule } from '../initiative/initiative.module';
@@ -13,9 +13,9 @@ import { TaskCommentService } from './task-comment.service';
 @Module({
   imports: [
     AuthModule,
-    InitiativeModule,
+    forwardRef(() => InitiativeModule),
     AdoptionModule,
-    KudosModule,
+    forwardRef(() => KudosModule),
     MongooseModule.forFeature([
       { name: 'Task', schema: TaskSchema },
       { name: 'TaskComment', schema: TaskCommentSchema },

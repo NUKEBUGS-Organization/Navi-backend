@@ -2,7 +2,13 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import mongoose from 'mongoose';
 
-export type InitiativeStatus = 'ACTIVE' | 'DRAFT' | 'PLANNING';
+// NOTE: PLANNING is kept for backward compatibility with older data.
+export type InitiativeStatus =
+  | 'DRAFT'
+  | 'WAITING_FOR_APPROVAL'
+  | 'ACTIVE'
+  | 'COMPLETED'
+  | 'PLANNING';
 
 export type ChangeType =
   | 'Tech/Digital'
@@ -40,7 +46,7 @@ export class Initiative {
   @Prop({ default: '' })
   description?: string;
 
-  @ApiProperty({ enum: ['ACTIVE', 'DRAFT', 'PLANNING'] })
+  @ApiProperty({ enum: ['DRAFT', 'WAITING_FOR_APPROVAL', 'ACTIVE', 'COMPLETED', 'PLANNING'] })
   @Prop({ default: 'DRAFT' })
   status: InitiativeStatus;
 
