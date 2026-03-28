@@ -13,6 +13,7 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
-EXPOSE 3000
-ENV PORT=3000
+# CapRover’s nginx proxies to container:80 by default — match that to avoid 502.
+EXPOSE 80
+ENV PORT=80
 CMD ["node", "dist/main.js"]
