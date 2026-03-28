@@ -14,6 +14,7 @@ import { ActivityModule } from './features/activity/activity.module';
 import { KudosModule } from './features/kudos/kudos.module';
 import { KnowledgeHubModule } from './features/knowledge-hub/knowledge-hub.module';
 import { MailModule } from './features/mail/mail.module';
+import { AppController } from './app.controller';
 
 const DEFAULT_MONGO_URI =
   'mongodb+srv://navi:navibackend@cluster0.nktmmeq.mongodb.net/navi?appName=Cluster0';
@@ -43,6 +44,6 @@ const DEFAULT_MONGO_URI =
     MailModule,
   ],
   providers: [],
-  controllers: [],
+  controllers: [AppController],
 })
 export class AppModule {}
