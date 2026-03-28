@@ -12,6 +12,8 @@ export type SendMailPayload = {
   subject: string;
   text?: string;
   html?: string;
+  /** If set, used instead of RESEND_FROM_EMAIL (domain must be verified in Resend). */
+  fromEmail?: string;
 };
 
 @Injectable()
@@ -58,10 +60,11 @@ export class MailService {
    * Sends one email via Resend.
    * - MAIL_DRY_RUN=true: logs only, no HTTP call.
    * - Missing RESEND_API_KEY: throws (unless dry-run).
-   * - RESEND_FROM_EMAIL must be a domain you verified in Resend (or Resend onboarding address for testing).
+   * - RESEND_FROM_EMAIL must be set; per-message `fromEmail` overrides it (same domain rules).
    */
   async send(payload: SendMailPayload): Promise<{ messageId?: string; dryRun: boolean }> {
-    const fromEmail = this.getFromAddress();
+    const defaultFrom = this.getFromAddress();
+    const fromEmail = (payload.fromEmail?.trim() || defaultFrom || '').trim() || null;
     const fromName = (this.config.get<string>('RESEND_FROM_NAME') ?? 'NAVI').trim() || 'NAVI';
     const from = fromEmail ? `${fromName} <${fromEmail}>` : `${fromName} <not-configured@localhost>`;
 

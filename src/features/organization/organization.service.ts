@@ -11,6 +11,12 @@ import { User, UserRole } from '../auth/user.entity';
 import { hashPassword } from '../../utils/HashPassword';
 import { MailService } from '../mail/mail.service';
 
+/** Inbox for public organization signup form (`POST /organizations/signup-request`). Override with SUPER_ADMIN_NOTIFICATION_EMAIL. */
+const DEFAULT_SUPER_ADMIN_NOTIFICATION_EMAIL = 'Navi@igcollaborative.com';
+
+/** From address for welcome emails when Super Admin creates an org (override ORG_OWNER_WELCOME_FROM_EMAIL). */
+const DEFAULT_ORG_OWNER_WELCOME_FROM_EMAIL = 'karaboyce@changewithnavi.com';
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -33,14 +39,8 @@ export class OrganizationService {
   async notifySignupRequest(
     dto: OrganizationSignupRequestDto,
   ): Promise<{ notified: boolean; message: string }> {
-    const to = (this.config.get<string>('SUPER_ADMIN_NOTIFICATION_EMAIL') ?? '').trim();
-    if (!to) {
-      this.logger.warn('SUPER_ADMIN_NOTIFICATION_EMAIL is not set; org signup request not emailed.');
-      return {
-        notified: false,
-        message: 'Thanks — our team will review your request.',
-      };
-    }
+    const configured = (this.config.get<string>('SUPER_ADMIN_NOTIFICATION_EMAIL') ?? '').trim();
+    const to = configured || DEFAULT_SUPER_ADMIN_NOTIFICATION_EMAIL;
     const rows: [string, string][] = [
       ['Organization', dto.organizationName],
       ['Contact', dto.organizationContact],
@@ -203,11 +203,15 @@ export class OrganizationService {
 <li><strong>Temporary password:</strong> ${escapeHtml(dto.adminPassword)}</li>
 </ul>
 <p>Please sign in and change your password from Settings.</p>`;
+    const ownerWelcomeFrom =
+      (this.config.get<string>('ORG_OWNER_WELCOME_FROM_EMAIL') ?? '').trim() ||
+      DEFAULT_ORG_OWNER_WELCOME_FROM_EMAIL;
     const recipients = [...new Set([dto.organizationEmail.trim(), dto.adminEmail.trim()].filter(Boolean))];
     for (const addr of recipients) {
       try {
         await this.mailService.send({
           to: addr,
+          fromEmail: ownerWelcomeFrom,
           subject: 'Your NAVI organization is ready',
           text: welcomeText,
           html: welcomeHtml,

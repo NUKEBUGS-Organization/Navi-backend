@@ -27,7 +27,7 @@ import { User, UserRole } from '../auth/user.entity';
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
-  /** Public: prospect org signup — emails super admin (see SUPER_ADMIN_NOTIFICATION_EMAIL). */
+  /** Public: prospect org signup — emails super admin (default Navi@igcollaborative.com; override SUPER_ADMIN_NOTIFICATION_EMAIL). */
   @Post('signup-request')
   @HttpCode(HttpStatus.ACCEPTED)
   async signupRequest(@Body() dto: OrganizationSignupRequestDto) {
