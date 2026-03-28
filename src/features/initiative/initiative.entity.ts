@@ -66,6 +66,14 @@ export class Initiative {
   @Prop({ default: 0 })
   progress: number;
 
+  /**
+   * When false, adoption milestone documents remain in the database but no longer affect
+   * initiative progress or employee-facing adoption views until re-enabled.
+   */
+  @ApiProperty({ required: false, default: true })
+  @Prop({ default: true })
+  adoptionTrackingEnabled?: boolean;
+
   @ApiProperty({ required: false })
   @Prop({ default: '' })
   readiness?: string;

@@ -235,10 +235,15 @@ export class TaskService {
   private async recalcInitiativeProgressWithAdoptions(initiativeId: string, organizationId: string): Promise<void> {
     const initId = new mongoose.Types.ObjectId(initiativeId);
     const orgId = new mongoose.Types.ObjectId(organizationId);
-    const [tasks, adoptions] = await Promise.all([
+    const initiative = await this.initiativeService.findOne(initiativeId, organizationId);
+    const [tasks, adoptionsRaw] = await Promise.all([
       this.taskModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
       this.adoptionModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
     ]);
+    const adoptions =
+      initiative && (initiative as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled === false
+        ? []
+        : adoptionsRaw;
     const progress = computeInitiativeProgressPercent(tasks as Task[], adoptions as Adoption[]);
     await this.initiativeService.updateProgress(initiativeId, organizationId, progress);
   }

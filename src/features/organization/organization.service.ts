@@ -1,19 +1,81 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import mongoose from 'mongoose';
 import { Organization } from './organization.entity';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { OrganizationSignupRequestDto } from './dto/organization-signup-request.dto';
 import { User, UserRole } from '../auth/user.entity';
 import { hashPassword } from '../../utils/HashPassword';
+import { MailService } from '../mail/mail.service';
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 @Injectable()
 export class OrganizationService {
+  private readonly logger = new Logger(OrganizationService.name);
+
   constructor(
     @InjectModel('Organization') private readonly orgModel: Model<Organization>,
     @InjectModel('User') private readonly userModel: Model<User>,
+    private readonly mailService: MailService,
+    private readonly config: ConfigService,
   ) {}
+
+  async notifySignupRequest(
+    dto: OrganizationSignupRequestDto,
+  ): Promise<{ notified: boolean; message: string }> {
+    const to = (this.config.get<string>('SUPER_ADMIN_NOTIFICATION_EMAIL') ?? '').trim();
+    if (!to) {
+      this.logger.warn('SUPER_ADMIN_NOTIFICATION_EMAIL is not set; org signup request not emailed.');
+      return {
+        notified: false,
+        message: 'Thanks — our team will review your request.',
+      };
+    }
+    const rows: [string, string][] = [
+      ['Organization', dto.organizationName],
+      ['Contact', dto.organizationContact],
+      ['Email', dto.email],
+      ['Phone', dto.phoneNumber ?? '—'],
+      ['City', dto.city ?? '—'],
+      ['Country', dto.country ?? '—'],
+      ['Industry', dto.industry ?? '—'],
+      ['Employees', dto.employeeCount ?? '—'],
+    ];
+    const text = ['New organization signup request (create their workspace in Super Admin).', '', ...rows.map(([k, v]) => `${k}: ${v}`)].join(
+      '\n',
+    );
+    const html = `<p><strong>New organization signup request</strong></p><table style="border-collapse:collapse">${rows
+      .map(
+        ([k, v]) =>
+          `<tr><td style="padding:4px 12px 4px 0;font-weight:600">${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`,
+      )
+      .join('')}</table>`;
+    try {
+      await this.mailService.send({
+        to,
+        subject: `[NAVI] Organization signup: ${dto.organizationName}`,
+        text,
+        html,
+      });
+    } catch (e) {
+      this.logger.error(e instanceof Error ? e.message : e);
+      throw new HttpException(
+        'Could not submit your request right now. Please try again later.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return { notified: true, message: 'Thanks — our team will review your request.' };
+  }
 
   async findAll(): Promise<Organization[]> {
     return this.orgModel.find().sort({ createdAt: -1 }).lean().exec();
@@ -122,6 +184,38 @@ export class OrganizationService {
     const orgObj = org.toObject ? org.toObject() : org;
     const adminObj = (adminUser.toObject ? adminUser.toObject() : adminUser) as unknown as Record<string, unknown>;
     delete adminObj.password;
+
+    const loginBase = (this.config.get<string>('FRONTEND_APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '');
+    const loginUrl = `${loginBase}/login`;
+    const welcomeText = [
+      'Your NAVI workspace has been created.',
+      '',
+      `Sign-in URL: ${loginUrl}`,
+      `Admin email (login): ${dto.adminEmail}`,
+      `Temporary password: ${dto.adminPassword}`,
+      '',
+      'Please sign in and change your password from Settings.',
+    ].join('\n');
+    const welcomeHtml = `<p>Your NAVI workspace has been created.</p>
+<ul>
+<li><strong>Sign-in URL:</strong> <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></li>
+<li><strong>Admin email (login):</strong> ${escapeHtml(dto.adminEmail)}</li>
+<li><strong>Temporary password:</strong> ${escapeHtml(dto.adminPassword)}</li>
+</ul>
+<p>Please sign in and change your password from Settings.</p>`;
+    const recipients = [...new Set([dto.organizationEmail.trim(), dto.adminEmail.trim()].filter(Boolean))];
+    for (const addr of recipients) {
+      try {
+        await this.mailService.send({
+          to: addr,
+          subject: 'Your NAVI organization is ready',
+          text: welcomeText,
+          html: welcomeHtml,
+        });
+      } catch (e) {
+        this.logger.error(`Welcome email to ${addr}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
 
     return {
       organization: orgObj as Organization,

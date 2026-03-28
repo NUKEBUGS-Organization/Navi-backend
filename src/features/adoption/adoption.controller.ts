@@ -37,7 +37,9 @@ export class AdoptionController {
   ) {
     const orgId = getOrgId(user);
     if (!orgId) return [];
-    if (initiativeId) return this.service.findByInitiative(initiativeId, orgId);
+    const role = (user as { role?: UserRole }).role;
+    if (initiativeId) return this.service.findByInitiative(initiativeId, orgId, role);
+    if (role === UserRole.EMPLOYEE) return [];
     return this.service.findByOrganization(orgId);
   }
 

@@ -5,11 +5,16 @@ import mongoose from 'mongoose';
 import { Initiative } from './initiative.entity';
 import { CreateInitiativeDto } from './dto/create-initiative.dto';
 import { UpdateInitiativeDto } from './dto/update-initiative.dto';
+import { Task } from '../task/task.entity';
+import { User } from '../auth/user.entity';
+
+export type InitiativeParticipationRole = 'lead' | 'raci' | 'assignee';
 
 @Injectable()
 export class InitiativeService {
   constructor(
     @InjectModel('Initiative') private readonly initiativeModel: Model<Initiative>,
+    @InjectModel('Task') private readonly taskModel: Model<Task>,
   ) {}
 
   private normalizeRaci(dto: {
@@ -147,6 +152,94 @@ export class InitiativeService {
     await this.initiativeModel
       .updateOne({ _id: initId, organizationId: orgId }, { $set: { progress: clamped } })
       .exec();
+  }
+
+  /**
+   * Initiatives the user is involved in: change lead, RACI participant, or has assigned tasks.
+   */
+  async listParticipationsForUser(
+    user: Partial<User>,
+    organizationId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      title: string;
+      status: string;
+      progress: number;
+      leadName: string;
+      roles: InitiativeParticipationRole[];
+    }>
+  > {
+    const userIdStr =
+      user._id != null
+        ? typeof user._id === 'string'
+          ? user._id
+          : (user._id as { toString?: () => string }).toString?.() ?? String(user._id)
+        : '';
+    if (!userIdStr) return [];
+
+    const orgOid = this.toObjectId(organizationId);
+    if (!orgOid) return [];
+
+    let userOid: mongoose.Types.ObjectId;
+    try {
+      userOid = new mongoose.Types.ObjectId(userIdStr);
+    } catch {
+      return [];
+    }
+
+    const initiatives = await this.initiativeModel.find({ organizationId: orgOid }).lean().exec();
+    const tasks = await this.taskModel
+      .find({ organizationId: orgOid, assigneeId: userOid })
+      .select('initiativeId')
+      .lean()
+      .exec();
+    const assigneeInitiativeIds = new Set(
+      tasks.map((t) => {
+        const i = (t as Task).initiativeId;
+        return i ? (i as mongoose.Types.ObjectId).toString() : '';
+      }).filter(Boolean),
+    );
+
+    const nameLower = (user.name ?? '').trim().toLowerCase();
+    const out: Array<{
+      id: string;
+      title: string;
+      status: string;
+      progress: number;
+      leadName: string;
+      roles: InitiativeParticipationRole[];
+    }> = [];
+
+    for (const raw of initiatives) {
+      const id = (raw as { _id: mongoose.Types.ObjectId })._id.toString();
+      const roles: InitiativeParticipationRole[] = [];
+      const lead = String((raw as Initiative).leadName ?? '').trim().toLowerCase();
+      if (lead && lead === nameLower) roles.push('lead');
+
+      const raciIds = [
+        ...((raw as Initiative).raciAccountableIds ?? []),
+        ...((raw as Initiative).raciResponsibleIds ?? []),
+        ...((raw as Initiative).raciConsultedIds ?? []),
+        ...((raw as Initiative).raciInformedIds ?? []),
+      ].map((x) => String(x));
+      if (raciIds.includes(userIdStr)) roles.push('raci');
+
+      if (assigneeInitiativeIds.has(id)) roles.push('assignee');
+
+      if (roles.length === 0) continue;
+
+      out.push({
+        id,
+        title: (raw as Initiative).title ?? 'Initiative',
+        status: String((raw as Initiative).status ?? ''),
+        progress: (raw as Initiative).progress ?? 0,
+        leadName: (raw as Initiative).leadName ?? '',
+        roles: Array.from(new Set(roles)),
+      });
+    }
+
+    return out.sort((a, b) => a.title.localeCompare(b.title));
   }
 
   private toObjectId(value: string): mongoose.Types.ObjectId | null {

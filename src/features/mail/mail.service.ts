@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 
 export type SendMailPayload = {
   to: string;
@@ -19,16 +19,17 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly apiKey: string | undefined;
   private readonly dryRun: boolean;
+  private resend: Resend | null = null;
 
   constructor(private readonly config: ConfigService) {
-    this.apiKey = (this.config.get<string>('SENDGRID_API_KEY') ?? '').trim() || undefined;
+    this.apiKey = (this.config.get<string>('RESEND_API_KEY') ?? '').trim() || undefined;
     this.dryRun = (this.config.get<string>('MAIL_DRY_RUN') ?? '').toLowerCase() === 'true';
     if (this.apiKey && !this.dryRun) {
-      sgMail.setApiKey(this.apiKey);
+      this.resend = new Resend(this.apiKey);
     }
   }
 
-  /** True when a real SendGrid call can be made (key present and not dry-run). */
+  /** True when a real Resend call can be made (key present and not dry-run). */
   isLiveSendConfigured(): boolean {
     return Boolean(this.apiKey) && !this.dryRun;
   }
@@ -38,7 +39,7 @@ export class MailService {
   }
 
   getFromAddress(): string | null {
-    const email = (this.config.get<string>('SENDGRID_FROM_EMAIL') ?? '').trim();
+    const email = (this.config.get<string>('RESEND_FROM_EMAIL') ?? '').trim();
     return email || null;
   }
 
@@ -48,20 +49,20 @@ export class MailService {
       dryRun: this.dryRun,
       hasApiKey: Boolean(this.apiKey),
       fromEmailConfigured: Boolean(this.getFromAddress()),
-      // Safe to surface: "replace later" test placeholder vs real
       fromEmailPreview: this.getFromAddress() ?? 'not set',
+      provider: 'resend',
     };
   }
 
   /**
-   * Sends one email via SendGrid.
+   * Sends one email via Resend.
    * - MAIL_DRY_RUN=true: logs only, no HTTP call.
-   * - Missing SENDGRID_API_KEY: throws (unless dry-run).
-   * - Use a verified sender as SENDGRID_FROM_EMAIL in the SendGrid dashboard.
+   * - Missing RESEND_API_KEY: throws (unless dry-run).
+   * - RESEND_FROM_EMAIL must be a domain you verified in Resend (or Resend onboarding address for testing).
    */
   async send(payload: SendMailPayload): Promise<{ messageId?: string; dryRun: boolean }> {
     const fromEmail = this.getFromAddress();
-    const fromName = (this.config.get<string>('SENDGRID_FROM_NAME') ?? 'NAVI').trim() || 'NAVI';
+    const fromName = (this.config.get<string>('RESEND_FROM_NAME') ?? 'NAVI').trim() || 'NAVI';
     const from = fromEmail ? `${fromName} <${fromEmail}>` : `${fromName} <not-configured@localhost>`;
 
     if (this.dryRun) {
@@ -74,39 +75,42 @@ export class MailService {
 
     if (!fromEmail) {
       throw new ServiceUnavailableException(
-        'SENDGRID_FROM_EMAIL is not set. Add a verified sender email from SendGrid.',
+        'RESEND_FROM_EMAIL is not set. Use an address from a domain verified in Resend.',
       );
     }
 
-    if (!this.apiKey) {
+    if (!this.apiKey || !this.resend) {
       throw new ServiceUnavailableException(
-        'SENDGRID_API_KEY is not set. Use a test API key for development and MAIL_DRY_RUN=true to skip sending.',
+        'RESEND_API_KEY is not set. Add your key to .env or set MAIL_DRY_RUN=true for local testing.',
       );
     }
 
-    const body =
-      payload.html != null
-        ? { html: payload.html }
-        : { text: payload.text ?? '(no body)' };
+    const html = payload.html ?? undefined;
+    const text = payload.html == null ? (payload.text ?? '(no body)') : undefined;
 
     try {
-      const [res] = await sgMail.send({
-        to: payload.to,
+      const { data, error } = await this.resend.emails.send({
         from,
+        to: payload.to,
         subject: payload.subject,
-        ...body,
+        ...(html != null ? { html } : { text: text ?? '(no body)' }),
       });
-      const messageId = res.headers['x-message-id'] as string | undefined;
-      this.logger.log(`SendGrid accepted message x-message-id=${messageId ?? 'n/a'} to=${payload.to}`);
+
+      if (error) {
+        this.logger.error(`Resend error: ${JSON.stringify(error)}`);
+        throw new BadGatewayException(
+          'Resend rejected the request. Check API key, verified domain, and recipient.',
+        );
+      }
+
+      const messageId = data?.id;
+      this.logger.log(`Resend accepted email id=${messageId ?? 'n/a'} to=${payload.to}`);
       return { messageId, dryRun: false };
     } catch (err: unknown) {
-      const sg = err as { response?: { body?: unknown }; message?: string };
-      this.logger.error(`SendGrid error: ${sg?.message ?? err}`);
-      if (sg?.response?.body != null) {
-        this.logger.error(JSON.stringify(sg.response.body));
-      }
+      if (err instanceof BadGatewayException || err instanceof ServiceUnavailableException) throw err;
+      this.logger.error(`Resend error: ${err instanceof Error ? err.message : err}`);
       throw new BadGatewayException(
-        'SendGrid rejected the request. Check API key, sender verification, and recipient.',
+        'Resend rejected the request. Check API key, verified domain, and recipient.',
       );
     }
   }

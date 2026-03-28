@@ -1,9 +1,21 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { NotFoundException } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { OrganizationSignupRequestDto } from './dto/organization-signup-request.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -15,6 +27,13 @@ import { User, UserRole } from '../auth/user.entity';
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
+  /** Public: prospect org signup — emails super admin (see SUPER_ADMIN_NOTIFICATION_EMAIL). */
+  @Post('signup-request')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async signupRequest(@Body() dto: OrganizationSignupRequestDto) {
+    return this.organizationService.notifySignupRequest(dto);
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -24,7 +43,7 @@ export class OrganizationController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.EMPLOYEE)
   @ApiBearerAuth()
   @Get('me')
   async getMyOrganization(@CurrentUser() user: Partial<User>) {

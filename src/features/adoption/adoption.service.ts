@@ -8,6 +8,7 @@ import { UpdateAdoptionDto } from './dto/update-adoption.dto';
 import { InitiativeService } from '../initiative/initiative.service';
 import { computeInitiativeProgressPercent } from '../initiative/initiative-progress.util';
 import { Task } from '../task/task.entity';
+import { UserRole } from '../auth/user.entity';
 
 @Injectable()
 export class AdoptionService {
@@ -20,11 +21,16 @@ export class AdoptionService {
   private async recalcInitiativeProgress(initiativeId: string, organizationId: string): Promise<void> {
     const initId = new mongoose.Types.ObjectId(initiativeId);
     const orgId = new mongoose.Types.ObjectId(organizationId);
-    const [tasks, adoptions] = await Promise.all([
+    const initiative = await this.initiativeService.findOne(initiativeId, organizationId);
+    const [tasks, adoptionsRaw] = await Promise.all([
       this.taskModel.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
       this.model.find({ initiativeId: initId, organizationId: orgId }).lean().exec(),
     ]);
-    const progress = computeInitiativeProgressPercent(tasks as Task[], adoptions as Adoption[]);
+    const adoptionCounts =
+      initiative && (initiative as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled === false
+        ? []
+        : adoptionsRaw;
+    const progress = computeInitiativeProgressPercent(tasks as Task[], adoptionCounts as Adoption[]);
     await this.initiativeService.updateProgress(initiativeId, organizationId, progress);
   }
 
@@ -46,7 +52,11 @@ export class AdoptionService {
     return doc.toObject?.() ?? (doc as unknown as Adoption);
   }
 
-  async findByInitiative(initiativeId: string, organizationId: string): Promise<Adoption[]> {
+  async findByInitiative(
+    initiativeId: string,
+    organizationId: string,
+    viewerRole?: UserRole,
+  ): Promise<Adoption[]> {
     const initiative = await this.initiativeService.findOne(initiativeId, organizationId);
     if (!initiative) return [];
     await this.recalcInitiativeProgress(initiativeId, organizationId);
@@ -58,6 +68,11 @@ export class AdoptionService {
       .sort({ targetDate: 1, createdAt: -1 })
       .lean()
       .exec();
+    const trackingOn = (initiative as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled !== false;
+    if (viewerRole === UserRole.EMPLOYEE) {
+      if (!trackingOn) return [];
+      return (list as Adoption[]).filter((a) => a.visibleToEmployees !== false);
+    }
     return list as Adoption[];
   }
 

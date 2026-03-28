@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Param,
@@ -16,6 +17,7 @@ import { User, UserRole } from './user.entity';
 import {
   ChangePasswordDto,
   CreateUserDto,
+  ForgotPasswordRequestDto,
   LoginDto,
   ResetPasswordDto,
   SignupDto,
@@ -105,11 +107,18 @@ export class AuthController {
     return this.authService.Signup(user);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  /** Request a 6-digit OTP by email (public). Always returns the same message if mail is configured. */
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() body: ForgotPasswordRequestDto) {
+    return this.authService.requestPasswordResetOtp(body.email);
+  }
+
+  /** Set a new password using email + OTP from forgot-password (public). */
   @Post('reset-password')
-  async resetPassword(@Body() body: ResetPasswordDto): Promise<User | null> {
-    return this.authService.ResetPassword(body);
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() body: ResetPasswordDto) {
+    return this.authService.resetPasswordWithOtp(body);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -19,7 +19,7 @@ export class MailController {
   @Get('status')
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'SendGrid configuration status (safe for test environments)',
+    summary: 'Resend mail configuration status (safe for test environments)',
     description:
       'Shows whether API key / from address are set and if MAIL_DRY_RUN is on. Does not expose secrets.',
   })
@@ -31,17 +31,17 @@ export class MailController {
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Send a one-off test email via SendGrid',
+    summary: 'Send a one-off test email via Resend',
     description:
-      'Requires SENDGRID_API_KEY and a verified SENDGRID_FROM_EMAIL unless MAIL_DRY_RUN=true (logs only).',
+      'Requires RESEND_API_KEY and RESEND_FROM_EMAIL unless MAIL_DRY_RUN=true (logs only).',
   })
   async testSend(@Body() dto: SendTestMailDto, @CurrentUser() user: Partial<User>) {
-    const subject = dto.subject?.trim() || 'NAVI — SendGrid test email';
+    const subject = dto.subject?.trim() || 'NAVI — Resend test email';
     const text =
       `This is a test message from the NAVI backend.\n\n` +
       `Time (UTC): ${new Date().toISOString()}\n` +
       `Triggered by: ${user.email ?? user._id ?? 'unknown'}\n\n` +
-      `Replace test API keys and sender in .env for production.`;
+      `Configure RESEND_API_KEY and RESEND_FROM_EMAIL in .env for production.`;
 
     const result = await this.mail.send({
       to: dto.to,
@@ -54,8 +54,8 @@ export class MailController {
       dryRun: result.dryRun,
       messageId: result.messageId,
       message: result.dryRun
-        ? 'MAIL_DRY_RUN is enabled — nothing was sent to SendGrid.'
-        : 'SendGrid accepted the message (delivery still depends on provider / spam filters).',
+        ? 'MAIL_DRY_RUN is enabled — nothing was sent to Resend.'
+        : 'Resend accepted the message (delivery still depends on provider / spam filters).',
     };
   }
 }

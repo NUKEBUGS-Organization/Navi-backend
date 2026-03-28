@@ -5,12 +5,16 @@ import { TaskModule } from '../task/task.module';
 import { InitiativeSchema } from './initiative.entity';
 import { InitiativeController } from './initiative.controller';
 import { InitiativeService } from './initiative.service';
+import { TaskSchema } from '../task/task.entity';
 
 @Module({
   imports: [
     AuthModule,
     forwardRef(() => TaskModule),
-    MongooseModule.forFeature([{ name: 'Initiative', schema: InitiativeSchema }]),
+    MongooseModule.forFeature([
+      { name: 'Initiative', schema: InitiativeSchema },
+      { name: 'Task', schema: TaskSchema },
+    ]),
   ],
   controllers: [InitiativeController],
   providers: [InitiativeService],

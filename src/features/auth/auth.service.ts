@@ -1,4 +1,5 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserRole } from './user.entity';
@@ -12,6 +13,8 @@ import {
   SignupDto,
   UpdateUserDto,
 } from './dto/auth.dto';
+import { PasswordResetOtp } from './password-reset-otp.entity';
+import { MailService } from '../mail/mail.service';
 import { hashPassword, comparePassword } from '../../utils/HashPassword';
 
 const SUPER_ADMIN_EMAIL = 'superadmin@gmail.com';
@@ -23,6 +26,14 @@ const SEED_SUPER_ADMINS: { email: string; password: string; name: string }[] = [
 ];
 const SEED_SUPER_ADMIN_EMAILS = new Set(SEED_SUPER_ADMINS.map((s) => s.email));
 
+const PASSWORD_RESET_OTP_TTL_MS = 15 * 60 * 1000;
+const PASSWORD_RESET_RESEND_COOLDOWN_MS = 60 * 1000;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+function generateSixDigitOtp(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
 export interface LoginResponse {
   access_token: string;
   user: Partial<User>;
@@ -30,9 +41,13 @@ export interface LoginResponse {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectModel('User') private readonly userModel: Model<User>,
+    @InjectModel('PasswordResetOtp') private readonly passwordResetOtpModel: Model<PasswordResetOtp>,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   /**
@@ -261,35 +276,138 @@ export class AuthService {
       );
     }
   }
-  async ResetPassword(
-    resetPasswordDto: ResetPasswordDto,
-  ): Promise<User | null> {
-    try {
-      const user = await this.userModel.findOne({ email: resetPasswordDto.email });
-      if (!user) {
+  /**
+   * Public forgot-password: if user exists, store OTP and email it. Response is generic for privacy.
+   */
+  async requestPasswordResetOtp(emailRaw: string): Promise<{ message: string }> {
+    const email = typeof emailRaw === 'string' ? emailRaw.trim().toLowerCase() : '';
+    const genericMessage =
+      'If an account exists for this email, you will receive a verification code shortly.';
+    if (!email) {
+      return { message: genericMessage };
+    }
+
+    const user = await this.userModel.findOne({ email }).lean().exec();
+    if (!user) {
+      return { message: genericMessage };
+    }
+
+    const existing = await this.passwordResetOtpModel
+      .findOne({ email })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    if (existing?.createdAt) {
+      const elapsed = Date.now() - new Date(existing.createdAt).getTime();
+      if (elapsed < PASSWORD_RESET_RESEND_COOLDOWN_MS) {
         throw new HttpException(
-          'User not found with the provided email.',
-          HttpStatus.NOT_FOUND,
+          'Please wait a minute before requesting another code.',
+          HttpStatus.TOO_MANY_REQUESTS,
         );
       }
-      user.password = await hashPassword(resetPasswordDto.newPassword);
-      return await user.save();
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
+    }
+
+    const otp = generateSixDigitOtp();
+    const codeHash = await hashPassword(otp);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_OTP_TTL_MS);
+
+    await this.passwordResetOtpModel.deleteMany({ email }).exec();
+    await this.passwordResetOtpModel.create({
+      email,
+      codeHash,
+      expiresAt,
+      attempts: 0,
+    });
+
+    const text = [
+      'Your NAVI password reset code is:',
+      '',
+      otp,
+      '',
+      `This code expires in ${PASSWORD_RESET_OTP_TTL_MS / 60000} minutes.`,
+      'If you did not request this, you can ignore this email.',
+    ].join('\n');
+    const html = `<p>Your NAVI password reset code is:</p><p style="font-size:24px;font-weight:700;letter-spacing:4px">${otp}</p><p>This code expires in ${PASSWORD_RESET_OTP_TTL_MS / 60000} minutes.</p><p>If you did not request this, you can ignore this email.</p>`;
+
+    try {
+      await this.mailService.send({
+        to: email,
+        subject: 'NAVI — Password reset code',
+        text,
+        html,
+      });
+    } catch (err) {
+      await this.passwordResetOtpModel.deleteMany({ email }).exec();
+      this.logger.error(`Password reset email failed for ${email}: ${err instanceof Error ? err.message : err}`);
       throw new HttpException(
-        'Failed to reset password. Please try again later.',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        'Could not send reset email. Check mail configuration or try again later.',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
+
+    if (this.mailService.isDryRun()) {
+      this.logger.log(`[PASSWORD_RESET_OTP] ${email} code=${otp} (MAIL_DRY_RUN)`);
+    }
+
+    return { message: genericMessage };
+  }
+
+  async resetPasswordWithOtp(dto: ResetPasswordDto): Promise<{ message: string }> {
+    const email = dto.email.trim().toLowerCase();
+    const doc = await this.passwordResetOtpModel
+      .findOne({ email, expiresAt: { $gt: new Date() } })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    if (!doc) {
+      throw new HttpException(
+        'Invalid or expired code. Request a new one from Forgot password.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if ((doc.attempts ?? 0) >= PASSWORD_RESET_MAX_ATTEMPTS) {
+      await this.passwordResetOtpModel.deleteOne({ _id: doc._id }).exec();
+      throw new HttpException(
+        'Too many failed attempts. Request a new code.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const match = await comparePassword(dto.otp, doc.codeHash);
+    if (!match) {
+      await this.passwordResetOtpModel
+        .updateOne({ _id: doc._id }, { $inc: { attempts: 1 } })
+        .exec();
+      const left = PASSWORD_RESET_MAX_ATTEMPTS - (doc.attempts ?? 0) - 1;
+      throw new HttpException(
+        left > 0
+          ? `Invalid code. ${left} attempt(s) remaining.`
+          : 'Invalid code. Request a new one.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const user = await this.userModel.findOne({ email }).select('+password').exec();
+    if (!user) {
+      await this.passwordResetOtpModel.deleteOne({ _id: doc._id }).exec();
+      throw new HttpException('User not found.', HttpStatus.NOT_FOUND);
+    }
+
+    user.password = await hashPassword(dto.newPassword);
+    await user.save();
+    await this.passwordResetOtpModel.deleteMany({ email }).exec();
+
+    return { message: 'Your password has been updated. You can sign in now.' };
   }
 
   async ChangePassword(
     changePasswordDto: ChangePasswordDto,
   ): Promise<User | null> {
     try {
-      const user = await this.userModel.findOne({ email: changePasswordDto.email });
+      const user = await this.userModel
+        .findOne({ email: changePasswordDto.email.trim().toLowerCase() })
+        .select('+password');
       if (!user) {
         throw new HttpException(
           'User not found with the provided email.',

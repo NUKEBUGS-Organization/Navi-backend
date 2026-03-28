@@ -43,7 +43,7 @@ export class ActivityService {
     const [tasks, comments, adoptions] = await Promise.all([
       this.taskService.findByInitiative(initiativeId, organizationId),
       this.taskCommentService.findByInitiative(initiativeId, organizationId),
-      this.adoptionService.findByInitiative(initiativeId, organizationId),
+      this.adoptionService.findByInitiative(initiativeId, organizationId, user?.role),
     ]);
 
     const toTaskId = (t: Task): string => {
@@ -66,15 +66,8 @@ export class ActivityService {
     const commentsForEmployee =
       isEmployee && userIdStr ? comments.filter((c) => String(c.userId) === userIdStr) : comments;
 
-    const allowedAdoptionMilestoneIds =
-      isEmployee && userIdStr
-        ? new Set(
-            tasksForEmployee
-              .map((t) => (t as unknown as { adoptionMilestoneId?: { toString?: () => string } | unknown }).adoptionMilestoneId)
-              .filter(Boolean)
-              .map((id) => (id as { toString?: () => string }).toString?.() ?? String(id)),
-          )
-        : null;
+    const adoptionTrackingOn =
+      (initiative as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled !== false;
 
     const items: ActivityItem[] = [];
 
@@ -118,13 +111,9 @@ export class ActivityService {
     }
 
     for (const a of adoptions) {
+      if (!adoptionTrackingOn) continue;
       const adoption = a as Adoption & { createdAt?: Date };
       if (isEmployee && adoption.visibleToEmployees === false) continue;
-      if (allowedAdoptionMilestoneIds) {
-        const adoptionId = (adoption as unknown as { _id?: { toString?: () => string } | unknown })._id;
-        const adoptionIdStr = adoptionId ? (adoptionId as { toString?: () => string }).toString?.() ?? String(adoptionId) : "";
-        if (adoptionIdStr && !allowedAdoptionMilestoneIds.has(adoptionIdStr)) continue;
-      }
       if (adoption.createdAt) {
         items.push({
           type: 'adoption_milestone',

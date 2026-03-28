@@ -52,6 +52,12 @@ export class InitiativeController {
     return this.initiativeService.findAllByOrganization(orgId);
   }
 
+  @Get('me/participations')
+  async myParticipations(@CurrentUser() user: Partial<User>) {
+    const orgId = this.getOrgId(user);
+    return this.initiativeService.listParticipationsForUser(user, orgId);
+  }
+
   @Get(':id')
   async getOne(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
     const orgId = this.getOrgId(user);
@@ -86,14 +92,41 @@ export class InitiativeController {
   ) {
     const orgId = this.getOrgId(user);
     const role = (user as { role?: UserRole }).role;
+    const existing = await this.initiativeService.findOne(id, orgId);
+    if (!existing) {
+      throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);
+    }
+
+    if (dto.adoptionTrackingEnabled !== undefined) {
+      const leadMatch =
+        String((existing as { leadName?: string }).leadName ?? '')
+          .trim()
+          .toLowerCase() === String(user.name ?? '').trim().toLowerCase();
+      const canSet =
+        role === UserRole.ADMIN || (role === UserRole.MANAGER && leadMatch);
+      if (!canSet) {
+        throw new HttpException(
+          'Only an org admin or this initiative’s change lead can change adoption tracking.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+
     // Managers cannot change initiative status; only admins can approve (ACTIVE) or complete (COMPLETED).
     const payload: UpdateInitiativeDto = { ...dto };
     if (role === UserRole.MANAGER) {
       delete (payload as unknown as { status?: unknown }).status;
     }
+    const prevAdoption =
+      (existing as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled !== false;
     const updated = await this.initiativeService.update(id, payload, orgId);
     if (!updated) {
       throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);
+    }
+    const nextAdoption =
+      (updated as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled !== false;
+    if (prevAdoption !== nextAdoption) {
+      await this.taskService.refreshInitiativeProgress(id, orgId);
     }
     return updated;
   }

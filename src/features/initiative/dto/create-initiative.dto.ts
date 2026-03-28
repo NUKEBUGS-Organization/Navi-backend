@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -77,6 +78,11 @@ export class CreateInitiativeDto {
   @IsOptional()
   @IsString()
   readiness?: string;
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  adoptionTrackingEnabled?: boolean;
 
   @ApiProperty({
     required: false,

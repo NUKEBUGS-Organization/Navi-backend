@@ -27,6 +27,20 @@ export class KnowledgeHubService implements OnModuleInit {
     private readonly initiativeService: InitiativeService,
   ) {}
 
+  /** Link-format bodies must include a non-empty Description block (matches Knowledge Hub UI). */
+  private assertLinkContributionHasDescription(text: string): void {
+    const t = text.trim();
+    if (!/^Link:/i.test(t)) return;
+    const m = t.match(/Description:\s*([\s\S]*)/i);
+    const desc = (m?.[1] ?? '').trim();
+    if (!desc) {
+      throw new HttpException(
+        'Link contributions must include a non-empty description.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   onModuleInit() {
     fs.mkdirSync(this.uploadDir, { recursive: true });
   }
@@ -108,6 +122,7 @@ export class KnowledgeHubService implements OnModuleInit {
     }
     const authorId =
       typeof uid === 'string' ? new mongoose.Types.ObjectId(uid) : (uid as mongoose.Types.ObjectId);
+    this.assertLinkContributionHasDescription(text);
     const created = await this.entryModel.create({
       organizationId: orgOid,
       initiativeId: iniOid,
@@ -149,6 +164,8 @@ export class KnowledgeHubService implements OnModuleInit {
     if (!canManage && !isAuthor) {
       throw new HttpException('You cannot edit this contribution.', HttpStatus.FORBIDDEN);
     }
+
+    this.assertLinkContributionHasDescription(text);
 
     const updated = await this.entryModel
       .findOneAndUpdate(

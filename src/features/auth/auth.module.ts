@@ -3,13 +3,19 @@ import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
 import { UserSchema } from './user.entity';
+import { PasswordResetOtpSchema } from './password-reset-otp.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { MailCoreModule } from '../mail/mail-core.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: 'User', schema: UserSchema }]),
+    MailCoreModule,
+    MongooseModule.forFeature([
+      { name: 'User', schema: UserSchema },
+      { name: 'PasswordResetOtp', schema: PasswordResetOtpSchema },
+    ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'navi-jwt-secret-change-in-production',
