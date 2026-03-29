@@ -289,7 +289,7 @@ export class OrganizationService {
     delete adminObj.password;
 
     const loginBase = (
-      this.config.get<string>('FRONTEND_APP_URL') ?? 'https://navi-frontend.changewithnavi.com'
+      this.config.get<string>('FRONTEND_APP_URL') ?? 'https://app.changewithnavi.com'
     ).replace(/\/$/, '');
     const loginUrl = `${loginBase}/`;
     const welcomeText = [
