@@ -75,6 +75,24 @@ export class OrganizationController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
+  @Get('signup-leads')
+  async listSignupLeads() {
+    return this.organizationService.findAllSignupLeads();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @Get('signup-leads/:leadId')
+  async getSignupLead(@Param('leadId') leadId: string) {
+    const lead = await this.organizationService.findSignupLeadById(leadId);
+    if (!lead) throw new NotFoundException('Lead not found');
+    return lead;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @Get(':id')
   async getOne(@Param('id') id: string) {
     const org = await this.organizationService.findOne(id);

@@ -4,6 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import mongoose from 'mongoose';
 import { Organization } from './organization.entity';
+import { OrganizationSignupLead } from './organization-signup-lead.entity';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { OrganizationSignupRequestDto } from './dto/organization-signup-request.dto';
@@ -32,6 +33,7 @@ export class OrganizationService {
   constructor(
     @InjectModel('Organization') private readonly orgModel: Model<Organization>,
     @InjectModel('User') private readonly userModel: Model<User>,
+    @InjectModel('OrganizationSignupLead') private readonly signupLeadModel: Model<OrganizationSignupLead>,
     private readonly mailService: MailService,
     private readonly config: ConfigService,
   ) {}
@@ -41,10 +43,22 @@ export class OrganizationService {
   ): Promise<{ notified: boolean; message: string }> {
     const configured = (this.config.get<string>('SUPER_ADMIN_NOTIFICATION_EMAIL') ?? '').trim();
     const to = configured || DEFAULT_SUPER_ADMIN_NOTIFICATION_EMAIL;
+    await this.signupLeadModel.create({
+      organizationName: dto.organizationName.trim(),
+      organizationContact: dto.organizationContact.trim(),
+      email: dto.email.trim().toLowerCase(),
+      phoneNumber: dto.phoneNumber?.trim(),
+      city: dto.city?.trim(),
+      country: dto.country?.trim(),
+      industry: dto.industry?.trim(),
+      employeeCount: dto.employeeCount?.trim(),
+      status: 'new',
+    });
+
     const rows: [string, string][] = [
       ['Organization', dto.organizationName],
       ['Contact', dto.organizationContact],
-      ['Email', dto.email],
+      ['Contact & admin email', dto.email],
       ['Phone', dto.phoneNumber ?? '—'],
       ['City', dto.city ?? '—'],
       ['Country', dto.country ?? '—'],
@@ -139,6 +153,95 @@ export class OrganizationService {
     return this.orgModel.findById(id).lean().exec();
   }
 
+  async findAllSignupLeads(): Promise<
+    {
+      id: string;
+      organizationName: string;
+      organizationContact: string;
+      email: string;
+      phoneNumber?: string;
+      city?: string;
+      country?: string;
+      industry?: string;
+      employeeCount?: string;
+      status: string;
+      createdAt: Date;
+    }[]
+  > {
+    const list = await this.signupLeadModel.find().sort({ createdAt: -1 }).lean().exec();
+    return list.map((doc) => {
+      const d = doc as unknown as {
+        _id: { toString: () => string };
+        organizationName: string;
+        organizationContact: string;
+        email: string;
+        phoneNumber?: string;
+        city?: string;
+        country?: string;
+        industry?: string;
+        employeeCount?: string;
+        status?: string;
+        createdAt?: Date;
+      };
+      return {
+        id: d._id.toString(),
+        organizationName: d.organizationName,
+        organizationContact: d.organizationContact,
+        email: d.email,
+        phoneNumber: d.phoneNumber,
+        city: d.city,
+        country: d.country,
+        industry: d.industry,
+        employeeCount: d.employeeCount,
+        status: d.status ?? 'new',
+        createdAt: d.createdAt ?? new Date(),
+      };
+    });
+  }
+
+  async findSignupLeadById(id: string): Promise<{
+    id: string;
+    organizationName: string;
+    organizationContact: string;
+    email: string;
+    phoneNumber?: string;
+    city?: string;
+    country?: string;
+    industry?: string;
+    employeeCount?: string;
+    status: string;
+    createdAt: Date;
+  } | null> {
+    const doc = await this.signupLeadModel.findById(id).lean().exec();
+    if (!doc) return null;
+    const d = doc as unknown as {
+      _id: { toString: () => string };
+      organizationName: string;
+      organizationContact: string;
+      email: string;
+      phoneNumber?: string;
+      city?: string;
+      country?: string;
+      industry?: string;
+      employeeCount?: string;
+      status?: string;
+      createdAt?: Date;
+    };
+    return {
+      id: d._id.toString(),
+      organizationName: d.organizationName,
+      organizationContact: d.organizationContact,
+      email: d.email,
+      phoneNumber: d.phoneNumber,
+      city: d.city,
+      country: d.country,
+      industry: d.industry,
+      employeeCount: d.employeeCount,
+      status: d.status ?? 'new',
+      createdAt: d.createdAt ?? new Date(),
+    };
+  }
+
   /**
    * Create organization and its admin user in one transaction.
    * Only Super Admin should call this (enforced by controller guard).
@@ -185,8 +288,10 @@ export class OrganizationService {
     const adminObj = (adminUser.toObject ? adminUser.toObject() : adminUser) as unknown as Record<string, unknown>;
     delete adminObj.password;
 
-    const loginBase = (this.config.get<string>('FRONTEND_APP_URL') ?? 'http://localhost:5173').replace(/\/$/, '');
-    const loginUrl = `${loginBase}/login`;
+    const loginBase = (
+      this.config.get<string>('FRONTEND_APP_URL') ?? 'https://navi-frontend.changewithnavi.com'
+    ).replace(/\/$/, '');
+    const loginUrl = `${loginBase}/`;
     const welcomeText = [
       'Your NAVI workspace has been created.',
       '',
@@ -219,6 +324,15 @@ export class OrganizationService {
       } catch (e) {
         this.logger.error(`Welcome email to ${addr}: ${e instanceof Error ? e.message : e}`);
       }
+    }
+
+    if (dto.sourceLeadId) {
+      await this.signupLeadModel
+        .findOneAndUpdate(
+          { _id: dto.sourceLeadId, status: 'new' },
+          { $set: { status: 'converted' } },
+        )
+        .exec();
     }
 
     return {

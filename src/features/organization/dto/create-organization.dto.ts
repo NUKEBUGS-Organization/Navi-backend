@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsArray,
   IsEmail,
+  IsMongoId,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -70,4 +71,9 @@ export class CreateOrganizationDto {
   @IsString({ each: true })
   @IsOptional()
   departments?: string[];
+
+  @ApiProperty({ required: false, description: 'Public signup lead id to mark as converted' })
+  @IsOptional()
+  @IsMongoId()
+  sourceLeadId?: string;
 }
