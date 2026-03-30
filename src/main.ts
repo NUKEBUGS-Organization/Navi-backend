@@ -12,6 +12,7 @@ async function bootstrap() {
       'http://127.0.0.1:5173',
       'https://127.0.0.1:5173',
       'https://app.changewithnavi.com',
+      'https://navi-frontend.captain.changewithnavi.com',
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
