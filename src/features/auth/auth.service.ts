@@ -23,6 +23,7 @@ const SUPER_ADMIN_EMAIL = 'superadmin@gmail.com';
 const SEED_SUPER_ADMINS: { email: string; password: string; name: string }[] = [
   { email: 'superadmin@gmail.com', password: 'karaboyce', name: 'Super Admin' },
   { email: 'superadmin2@gmail.com', password: 'superadmin', name: 'Super Admin 2' },
+  { email: 'superadmin@azib.com', password: 'azib@123', name: 'Super Admin' },
 ];
 const SEED_SUPER_ADMIN_EMAILS = new Set(SEED_SUPER_ADMINS.map((s) => s.email));
 
