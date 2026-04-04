@@ -31,6 +31,35 @@ export class AssessmentSubmission {
   @Prop({ default: '' })
   riskLevel?: string;
 
+  /** 1–5 per flattened assessment question (same order as steps/questions). */
+  @ApiProperty({ type: [Number], required: false })
+  @Prop({ type: [Number], default: [] })
+  answers?: number[];
+
+  @ApiProperty({ required: false })
+  @Prop()
+  naviN?: number;
+
+  @ApiProperty({ required: false })
+  @Prop()
+  naviA?: number;
+
+  @ApiProperty({ required: false })
+  @Prop()
+  naviV?: number;
+
+  @ApiProperty({ required: false })
+  @Prop()
+  naviI?: number;
+
+  @ApiProperty({ required: false })
+  @Prop()
+  naviIndex?: number;
+
+  @ApiProperty({ required: false })
+  @Prop({ default: '' })
+  naviClassification?: string;
+
   @ApiProperty()
   createdAt: Date;
 

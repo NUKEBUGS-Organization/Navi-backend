@@ -6,15 +6,34 @@ import { AssessmentSubmission } from './assessment-submission.entity';
 import { Assessment } from './assessment.entity';
 import { InitiativeService } from '../initiative/initiative.service';
 import { KudosService } from '../kudos/kudos.service';
+import { User } from '../auth/user.entity';
+import { computeNaviFromAnswers } from '../../utils/navi-score';
 
 @Injectable()
 export class AssessmentSubmissionService {
   constructor(
     @InjectModel('AssessmentSubmission') private readonly submissionModel: Model<AssessmentSubmission>,
     @InjectModel('Assessment') private readonly assessmentModel: Model<Assessment>,
+    @InjectModel('User') private readonly userModel: Model<User>,
     private readonly initiativeService: InitiativeService,
     private readonly kudosService: KudosService,
   ) {}
+
+  /** Pillars parallel to flattened questions; uses '' for untagged (NAVI skipped for those indices). */
+  private flattenPillarsForScoring(assessment: Assessment): ('N' | 'A' | 'V' | 'I' | '')[] {
+    const out: ('N' | 'A' | 'V' | 'I' | '')[] = [];
+    for (const step of assessment.steps ?? []) {
+      const qs = step.questions ?? [];
+      const ps = (step as { pillars?: string[] }).pillars ?? [];
+      for (let i = 0; i < qs.length; i++) {
+        const p = String(ps[i] ?? '')
+          .trim()
+          .toUpperCase();
+        out.push(p === 'N' || p === 'A' || p === 'V' || p === 'I' ? p : '');
+      }
+    }
+    return out;
+  }
 
   async create(
     assessmentId: string,
@@ -22,6 +41,7 @@ export class AssessmentSubmissionService {
     organizationId: string,
     overallScore: number,
     riskLevel?: string,
+    answers?: number[],
   ): Promise<AssessmentSubmission> {
     const assessment = await this.assessmentModel
       .findById(new mongoose.Types.ObjectId(assessmentId))
@@ -43,6 +63,29 @@ export class AssessmentSubmissionService {
         HttpStatus.FORBIDDEN,
       );
     }
+
+    const pillarsFlat = this.flattenPillarsForScoring(assessment as Assessment);
+    let naviN: number | undefined;
+    let naviA: number | undefined;
+    let naviV: number | undefined;
+    let naviI: number | undefined;
+    let naviIndex: number | undefined;
+    let naviClassification: string | undefined;
+    let storedAnswers: number[] | undefined;
+
+    if (answers?.length && answers.length === pillarsFlat.length) {
+      storedAnswers = answers.map((a) => Math.min(5, Math.max(1, Math.round(Number(a)))));
+      const navi = computeNaviFromAnswers(storedAnswers, pillarsFlat);
+      if (navi) {
+        naviN = navi.n;
+        naviA = navi.a;
+        naviV = navi.v;
+        naviI = navi.i;
+        naviIndex = navi.naviIndex;
+        naviClassification = navi.classification;
+      }
+    }
+
     const doc = await this.submissionModel.create({
       assessmentId: new mongoose.Types.ObjectId(assessmentId),
       initiativeId: new mongoose.Types.ObjectId(initId),
@@ -50,6 +93,13 @@ export class AssessmentSubmissionService {
       userId: new mongoose.Types.ObjectId(userId),
       overallScore,
       riskLevel: riskLevel ?? '',
+      answers: storedAnswers ?? [],
+      naviN,
+      naviA,
+      naviV,
+      naviI,
+      naviIndex,
+      naviClassification: naviClassification ?? '',
     });
 
     // System kudos for employee assessment submissions.
@@ -62,6 +112,78 @@ export class AssessmentSubmissionService {
     });
 
     return doc.toObject?.() ?? (doc as unknown as AssessmentSubmission);
+  }
+
+  async getNaviAggregate(organizationId: string): Promise<{
+    submissionCount: number;
+    avgNaviIndex: number | null;
+    avgN: number | null;
+    avgA: number | null;
+    avgV: number | null;
+    avgI: number | null;
+    leadershipAvgNavi: number | null;
+    employeeAvgNavi: number | null;
+    alignmentGap: number | null;
+  }> {
+    const list = await this.findSubmissionsByQuery({
+      organizationId: new mongoose.Types.ObjectId(organizationId),
+    });
+    const withNavi = list.filter((s) => s.naviIndex != null && !Number.isNaN(Number(s.naviIndex)));
+    if (withNavi.length === 0) {
+      return {
+        submissionCount: list.length,
+        avgNaviIndex: null,
+        avgN: null,
+        avgA: null,
+        avgV: null,
+        avgI: null,
+        leadershipAvgNavi: null,
+        employeeAvgNavi: null,
+        alignmentGap: null,
+      };
+    }
+    const avg = (fn: (x: AssessmentSubmission) => number | undefined) => {
+      const vals = withNavi.map(fn).filter((v): v is number => v != null && !Number.isNaN(v));
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    };
+    const orgOid = new mongoose.Types.ObjectId(organizationId);
+    const users = await this.userModel
+      .find({ organizationId: orgOid })
+      .select('_id role')
+      .lean()
+      .exec();
+    const roleByUserId: Record<string, string> = {};
+    for (const u of users) {
+      const id = (u as { _id: { toString: () => string } })._id.toString();
+      roleByUserId[id] = String((u as { role?: string }).role ?? '');
+    }
+    const leadershipSubs = withNavi.filter((s) => {
+      const r = roleByUserId[String(s.userId)] ?? '';
+      return r === 'admin' || r === 'manager';
+    });
+    const employeeSubs = withNavi.filter((s) => {
+      const r = roleByUserId[String(s.userId)] ?? '';
+      return r === 'employee';
+    });
+    const avgIdx = (subs: AssessmentSubmission[]) =>
+      subs.length ? subs.reduce((a, s) => a + Number(s.naviIndex), 0) / subs.length : null;
+    const lAvg = avgIdx(leadershipSubs);
+    const eAvg = avgIdx(employeeSubs);
+    let alignmentGap: number | null = null;
+    if (lAvg != null && eAvg != null) {
+      alignmentGap = Math.round(Math.abs(lAvg - eAvg) * 100) / 100;
+    }
+    return {
+      submissionCount: list.length,
+      avgNaviIndex: avg((s) => s.naviIndex),
+      avgN: avg((s) => s.naviN),
+      avgA: avg((s) => s.naviA),
+      avgV: avg((s) => s.naviV),
+      avgI: avg((s) => s.naviI),
+      leadershipAvgNavi: lAvg,
+      employeeAvgNavi: eAvg,
+      alignmentGap,
+    };
   }
 
   async findByOrganization(organizationId: string): Promise<(AssessmentSubmission & { assessmentName?: string })[]> {

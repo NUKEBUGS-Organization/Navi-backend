@@ -66,6 +66,30 @@ export class UpdateUserDto {
 
   @ApiProperty({ required: false })
   isActive?: boolean;
+
+  @ApiProperty({ required: false, description: 'Profile image as data URL (max ~400KB)' })
+  @IsOptional()
+  @IsString()
+  photoDataUrl?: string;
+}
+
+export class UpdateProfileDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  photoDataUrl?: string;
+}
+
+export class BulkImportUsersDto {
+  @ApiProperty({ description: 'CSV rows: name,email,role,departments (departments semicolon-separated). Header optional.' })
+  @IsString()
+  @IsNotEmpty()
+  csvText: string;
 }
 
 export class SignupDto {

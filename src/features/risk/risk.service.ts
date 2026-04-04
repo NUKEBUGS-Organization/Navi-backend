@@ -10,6 +10,7 @@ import { AssessmentSubmission } from '../assessment/assessment-submission.entity
 
 /** Risk level from assessment avg score: >=4 Low, 2.5-4 Medium, <2.5 High */
 export interface AssessmentDerivedRiskDto {
+  areaOfRisk: string;
   initiativeId: string;
   initiativeTitle: string;
   riskLevel: 'Medium' | 'High';
@@ -121,6 +122,7 @@ export class RiskService {
       const riskLevel: 'Medium' | 'High' = avg < 2.5 ? 'High' : 'Medium';
       const initiative = await this.initiativeService.findOne(initId, organizationId);
       results.push({
+        areaOfRisk: 'Readiness & assessment signals',
         initiativeId: initId,
         initiativeTitle: initiative?.title ?? 'Unknown',
         riskLevel,

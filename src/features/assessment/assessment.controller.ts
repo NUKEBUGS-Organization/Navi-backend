@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AssessmentService } from './assessment.service';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
+import { NAVI_ASSESSMENT_TEMPLATES } from './assessment-templates.data';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -42,6 +43,13 @@ export class AssessmentController {
       );
     }
     return this.assessmentService.create(dto, orgId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('templates')
+  listTemplates() {
+    return NAVI_ASSESSMENT_TEMPLATES;
   }
 
   @UseGuards(JwtAuthGuard)

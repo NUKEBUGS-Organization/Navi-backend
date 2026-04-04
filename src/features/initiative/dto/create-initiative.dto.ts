@@ -59,6 +59,11 @@ export class CreateInitiativeDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  sponsorName?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   dateRange?: string;
 
   @ApiProperty({ type: [String], required: false })

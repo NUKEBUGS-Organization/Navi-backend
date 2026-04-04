@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
 
 export class CreateSubmissionDto {
   @ApiProperty()
@@ -16,4 +16,14 @@ export class CreateSubmissionDto {
   @IsOptional()
   @IsString()
   riskLevel?: string;
+
+  @ApiProperty({
+    type: [Number],
+    required: false,
+    description: '1–5 per question in flattened step order for NAVI pillar scoring',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  answers?: number[];
 }

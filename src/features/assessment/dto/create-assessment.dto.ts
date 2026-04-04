@@ -10,6 +10,16 @@ export class AssessmentStepDto {
   @IsArray()
   @IsString({ each: true })
   questions: string[];
+
+  @ApiProperty({
+    type: [String],
+    required: false,
+    description: 'Parallel to questions: N, A, V, or I for NAVI scoring',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  pillars?: string[];
 }
 
 export class CreateAssessmentDto {

@@ -6,6 +6,7 @@ import { InitiativeSchema } from './initiative.entity';
 import { InitiativeController } from './initiative.controller';
 import { InitiativeService } from './initiative.service';
 import { TaskSchema } from '../task/task.entity';
+import { UserSchema } from '../auth/user.entity';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TaskSchema } from '../task/task.entity';
     MongooseModule.forFeature([
       { name: 'Initiative', schema: InitiativeSchema },
       { name: 'Task', schema: TaskSchema },
+      { name: 'User', schema: UserSchema },
     ]),
   ],
   controllers: [InitiativeController],

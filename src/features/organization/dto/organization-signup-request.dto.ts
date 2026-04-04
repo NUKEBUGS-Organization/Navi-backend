@@ -41,4 +41,9 @@ export class OrganizationSignupRequestDto {
   @IsOptional()
   @IsString()
   employeeCount?: string;
+
+  @ApiProperty({ required: false, description: 'Referral source' })
+  @IsOptional()
+  @IsString()
+  hearAboutUs?: string;
 }

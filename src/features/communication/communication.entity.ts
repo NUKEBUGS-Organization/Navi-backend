@@ -42,6 +42,14 @@ export class Communication {
   @Prop({ default: '' })
   message?: string;
 
+  @ApiProperty({ required: false })
+  @Prop()
+  emailSentAt?: Date;
+
+  @ApiProperty({ type: [String], required: false })
+  @Prop({ type: [String], default: [] })
+  lastRecipientEmails?: string[];
+
   @ApiProperty()
   createdAt: Date;
 

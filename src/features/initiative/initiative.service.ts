@@ -15,6 +15,7 @@ export class InitiativeService {
   constructor(
     @InjectModel('Initiative') private readonly initiativeModel: Model<Initiative>,
     @InjectModel('Task') private readonly taskModel: Model<Task>,
+    @InjectModel('User') private readonly userModel: Model<User>,
   ) {}
 
   private normalizeRaci(dto: {
@@ -240,6 +241,75 @@ export class InitiativeService {
     }
 
     return out.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  /** Combined RACI assignments across all initiatives (stakeholder rollup). */
+  async getRaciRollup(organizationId: string): Promise<
+    Array<{
+      userId: string;
+      name: string;
+      email?: string;
+      asAccountable: string[];
+      asResponsible: string[];
+      asConsulted: string[];
+      asInformed: string[];
+    }>
+  > {
+    const orgOid = this.toObjectId(organizationId);
+    if (!orgOid) return [];
+    const initiatives = await this.initiativeModel.find({ organizationId: orgOid }).lean().exec();
+    type Acc = { A: Set<string>; R: Set<string>; C: Set<string>; I: Set<string> };
+    const byUser: Record<string, Acc> = {};
+    const ensure = (uid: string): Acc => {
+      if (!byUser[uid]) byUser[uid] = { A: new Set(), R: new Set(), C: new Set(), I: new Set() };
+      return byUser[uid];
+    };
+    const addTitles = (ids: string[] | undefined, bucket: keyof Acc, title: string) => {
+      for (const uid of ids ?? []) {
+        if (!uid) continue;
+        ensure(uid)[bucket].add(title);
+      }
+    };
+    for (const ini of initiatives) {
+      const raw = ini as Initiative;
+      const title = raw.title ?? 'Initiative';
+      addTitles(raw.raciAccountableIds, 'A', title);
+      addTitles(raw.raciResponsibleIds, 'R', title);
+      addTitles(raw.raciConsultedIds, 'C', title);
+      addTitles(raw.raciInformedIds, 'I', title);
+    }
+    const userIds = Object.keys(byUser);
+    if (userIds.length === 0) return [];
+    const oids = userIds.filter((id) => mongoose.Types.ObjectId.isValid(id)).map((id) => new mongoose.Types.ObjectId(id));
+    const users = await this.userModel
+      .find({ _id: { $in: oids }, organizationId: orgOid })
+      .select('name email')
+      .lean()
+      .exec();
+    const nameById: Record<string, { name: string; email?: string }> = {};
+    for (const u of users) {
+      const id = (u as { _id: { toString: () => string } })._id.toString();
+      nameById[id] = { name: (u as { name?: string }).name ?? '—', email: (u as { email?: string }).email };
+    }
+    return userIds
+      .map((userId) => ({
+        userId,
+        name: nameById[userId]?.name ?? userId.slice(-6),
+        email: nameById[userId]?.email,
+        asAccountable: [...byUser[userId].A],
+        asResponsible: [...byUser[userId].R],
+        asConsulted: [...byUser[userId].C],
+        asInformed: [...byUser[userId].I],
+      }))
+      .filter(
+        (row) =>
+          row.asAccountable.length +
+            row.asResponsible.length +
+            row.asConsulted.length +
+            row.asInformed.length >
+          0,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   private toObjectId(value: string): mongoose.Types.ObjectId | null {

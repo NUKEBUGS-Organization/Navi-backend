@@ -30,6 +30,10 @@ export class OrganizationSignupLead {
   @Prop()
   employeeCount?: string;
 
+  /** How they heard about NAVI (Referral, LinkedIn, etc.). */
+  @Prop()
+  hearAboutUs?: string;
+
   @Prop({ default: 'new' })
   status: SignupLeadStatus;
 }

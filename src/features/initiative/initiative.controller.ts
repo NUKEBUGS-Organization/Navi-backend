@@ -58,6 +58,12 @@ export class InitiativeController {
     return this.initiativeService.listParticipationsForUser(user, orgId);
   }
 
+  @Get('raci/rollup')
+  async raciRollup(@CurrentUser() user: Partial<User>) {
+    const orgId = this.getOrgId(user);
+    return this.initiativeService.getRaciRollup(orgId);
+  }
+
   @Get(':id')
   async getOne(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
     const orgId = this.getOrgId(user);

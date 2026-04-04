@@ -39,7 +39,15 @@ export class AssessmentSubmissionController {
       orgId,
       dto.overallScore,
       dto.riskLevel,
+      dto.answers,
     );
+  }
+
+  @Get('navi-summary')
+  async naviSummary(@CurrentUser() user: Partial<User>) {
+    const orgId = getOrgId(user);
+    if (!orgId) return null;
+    return this.submissionService.getNaviAggregate(orgId);
   }
 
   @Get()

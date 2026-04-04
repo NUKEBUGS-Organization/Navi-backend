@@ -52,18 +52,20 @@ export class OrganizationService {
       country: dto.country?.trim(),
       industry: dto.industry?.trim(),
       employeeCount: dto.employeeCount?.trim(),
+      hearAboutUs: dto.hearAboutUs?.trim(),
       status: 'new',
     });
 
     const rows: [string, string][] = [
       ['Organization', dto.organizationName],
       ['Contact', dto.organizationContact],
-      ['Contact & admin email', dto.email],
+      ['Organization admin email', dto.email],
       ['Phone', dto.phoneNumber ?? '—'],
       ['City', dto.city ?? '—'],
       ['Country', dto.country ?? '—'],
       ['Industry', dto.industry ?? '—'],
       ['Employees', dto.employeeCount ?? '—'],
+      ['How they heard about us', dto.hearAboutUs?.trim() ?? '—'],
     ];
     const text = ['New organization signup request (create their workspace in Super Admin).', '', ...rows.map(([k, v]) => `${k}: ${v}`)].join(
       '\n',
@@ -106,6 +108,7 @@ export class OrganizationService {
       departments: string[];
       departmentCount: number;
       employeeCount: number;
+      pendingEmployeeCount?: number;
       email?: string;
       country?: string;
     }[]
@@ -132,6 +135,7 @@ export class OrganizationService {
         employeeCount?: number;
         email?: string;
         country?: string;
+        pendingEmployeeCount?: number;
       };
       const departments = o.departments ?? [];
       return {
@@ -143,6 +147,7 @@ export class OrganizationService {
         departments,
         departmentCount: departments.length,
         employeeCount: o.employeeCount ?? 0,
+        pendingEmployeeCount: o.pendingEmployeeCount,
         email: o.email,
         country: o.country,
       };
@@ -164,6 +169,7 @@ export class OrganizationService {
       country?: string;
       industry?: string;
       employeeCount?: string;
+      hearAboutUs?: string;
       status: string;
       createdAt: Date;
     }[]
@@ -180,6 +186,7 @@ export class OrganizationService {
         country?: string;
         industry?: string;
         employeeCount?: string;
+        hearAboutUs?: string;
         status?: string;
         createdAt?: Date;
       };
@@ -193,6 +200,7 @@ export class OrganizationService {
         country: d.country,
         industry: d.industry,
         employeeCount: d.employeeCount,
+        hearAboutUs: d.hearAboutUs,
         status: d.status ?? 'new',
         createdAt: d.createdAt ?? new Date(),
       };
@@ -209,6 +217,7 @@ export class OrganizationService {
     country?: string;
     industry?: string;
     employeeCount?: string;
+    hearAboutUs?: string;
     status: string;
     createdAt: Date;
   } | null> {
@@ -224,6 +233,7 @@ export class OrganizationService {
       country?: string;
       industry?: string;
       employeeCount?: string;
+      hearAboutUs?: string;
       status?: string;
       createdAt?: Date;
     };
@@ -237,6 +247,7 @@ export class OrganizationService {
       country: d.country,
       industry: d.industry,
       employeeCount: d.employeeCount,
+      hearAboutUs: d.hearAboutUs,
       status: d.status ?? 'new',
       createdAt: d.createdAt ?? new Date(),
     };
@@ -292,22 +303,73 @@ export class OrganizationService {
       this.config.get<string>('FRONTEND_APP_URL') ?? 'https://app.changewithnavi.com'
     ).replace(/\/$/, '');
     const loginUrl = `${loginBase}/`;
+    const onboardingBookingUrl = (
+      this.config.get<string>('NAVI_ONBOARDING_BOOKING_URL') ?? 'https://changewithnavi.com'
+    ).trim();
+    const clientName = dto.organizationOwner.trim() || 'Team';
     const welcomeText = [
-      'Your NAVI workspace has been created.',
+      `Dear ${clientName},`,
       '',
-      `Sign-in URL: ${loginUrl}`,
-      `Admin email (login): ${dto.adminEmail}`,
-      `Temporary password: ${dto.adminPassword}`,
+      'Welcome to NAVI.',
       '',
-      'Please sign in and change your password from Settings.',
+      'Your workspace is now live and ready to support your organization in driving change with clarity, structure, and accountability. We are excited to partner with you as you move from strategy to execution.',
+      '',
+      'Your Access Details',
+      `- Workspace: ${loginUrl}`,
+      `- Username: ${dto.adminEmail}`,
+      `- Temporary Password: ${dto.adminPassword}`,
+      '',
+      'For security purposes, you will be prompted to update your password upon first login.',
+      '',
+      'Getting Started',
+      'We recommend taking a few minutes to:',
+      '- Log in and secure your account',
+      '- Set up your first change initiative',
+      '- Assign ownership across your leadership team',
+      '',
+      'Book Your Onboarding Session',
+      'To ensure you and your team get the most value from NAVI, we encourage you to schedule your onboarding session within your first 7 days:',
+      onboardingBookingUrl,
+      '',
+      'If a session is not scheduled within this period, a member of our team will reach out to support you.',
+      '',
+      'What to Expect',
+      "Over the next few days, you'll receive a small number of emails from us to help you get set up and start seeing value quickly. Our goal is to guide you—without overwhelming you.",
+      '',
+      'This is where execution begins—not just planning.',
+      '',
+      'We look forward to supporting your journey.',
+      '',
+      'Warm regards,',
+      'The NAVI Team',
+      'powered by IGC Group Inc.',
     ].join('\n');
-    const welcomeHtml = `<p>Your NAVI workspace has been created.</p>
+    const welcomeHtml = `<p>Dear ${escapeHtml(clientName)},</p>
+<p>Welcome to NAVI.</p>
+<p>Your workspace is now live and ready to support your organization in driving change with clarity, structure, and accountability. We&apos;re excited to partner with you as you move from strategy to execution.</p>
+<p><strong>Your Access Details</strong></p>
 <ul>
-<li><strong>Sign-in URL:</strong> <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></li>
-<li><strong>Admin email (login):</strong> ${escapeHtml(dto.adminEmail)}</li>
-<li><strong>Temporary password:</strong> ${escapeHtml(dto.adminPassword)}</li>
+<li><strong>Workspace:</strong> <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></li>
+<li><strong>Username:</strong> ${escapeHtml(dto.adminEmail)}</li>
+<li><strong>Temporary Password:</strong> ${escapeHtml(dto.adminPassword)}</li>
 </ul>
-<p>Please sign in and change your password from Settings.</p>`;
+<p>For security purposes, you will be prompted to update your password upon first login.</p>
+<p><strong>Getting Started</strong></p>
+<p>We recommend taking a few minutes to:</p>
+<ul>
+<li>Log in and secure your account</li>
+<li>Set up your first change initiative</li>
+<li>Assign ownership across your leadership team</li>
+</ul>
+<p><strong>Book Your Onboarding Session</strong></p>
+<p>To ensure you and your team get the most value from NAVI, we encourage you to schedule your onboarding session within your first 7 days:</p>
+<p><a href="${escapeHtml(onboardingBookingUrl)}">Click to Book Onboarding</a></p>
+<p>If a session is not scheduled within this period, a member of our team will reach out to support you.</p>
+<p><strong>What to Expect</strong></p>
+<p>Over the next few days, you&apos;ll receive a small number of emails from us to help you get set up and start seeing value quickly. Our goal is to guide you&mdash;without overwhelming you.</p>
+<p>This is where execution begins&mdash;not just planning.</p>
+<p>We look forward to supporting your journey.</p>
+<p>Warm regards,<br/>The NAVI Team<br/><em>powered by IGC Group Inc.</em></p>`;
     const ownerWelcomeFrom =
       (this.config.get<string>('ORG_OWNER_WELCOME_FROM_EMAIL') ?? '').trim() ||
       DEFAULT_ORG_OWNER_WELCOME_FROM_EMAIL;
@@ -342,7 +404,52 @@ export class OrganizationService {
   }
 
   /**
-   * Update organization by ID. Used by Admin (own org via me) or Super Admin (any org by id).
+   * Org members (admin/manager): employee count changes require super admin approval.
+   */
+  async updateFromOrgMember(id: string, dto: UpdateOrganizationDto): Promise<Organization | null> {
+    const existing = await this.orgModel.findById(id).lean().exec();
+    if (!existing) return null;
+    const updates: Record<string, unknown> = {};
+    if (dto.name !== undefined) updates.name = dto.name.trim();
+    if (dto.description !== undefined) updates.description = dto.description.trim();
+    if (dto.industry !== undefined) updates.industry = dto.industry.trim();
+    if (dto.email !== undefined) updates.email = dto.email.trim();
+    if (dto.phoneNumber !== undefined) updates.phoneNumber = dto.phoneNumber.trim();
+    if (dto.city !== undefined) updates.city = dto.city.trim();
+    if (dto.country !== undefined) updates.country = dto.country.trim();
+    if (dto.logo !== undefined) updates.logo = dto.logo.trim();
+    if (dto.departments !== undefined) updates.departments = dto.departments.map((d) => d.trim()).filter(Boolean);
+    if (dto.employeeCount !== undefined) {
+      const approved = (existing as { employeeCount?: number }).employeeCount ?? 0;
+      if (dto.employeeCount !== approved) {
+        updates.pendingEmployeeCount = dto.employeeCount;
+      }
+    }
+    const updated = await this.orgModel
+      .findByIdAndUpdate(id, { $set: updates }, { new: true })
+      .lean()
+      .exec();
+    return updated as Organization | null;
+  }
+
+  async approvePendingEmployeeCount(id: string): Promise<Organization | null> {
+    const org = await this.orgModel.findById(id).lean().exec();
+    if (!org) return null;
+    const pending = (org as { pendingEmployeeCount?: number }).pendingEmployeeCount;
+    if (pending == null) return org as Organization;
+    const updated = await this.orgModel
+      .findByIdAndUpdate(
+        id,
+        { $set: { employeeCount: pending }, $unset: { pendingEmployeeCount: 1 } },
+        { new: true },
+      )
+      .lean()
+      .exec();
+    return updated as Organization | null;
+  }
+
+  /**
+   * Super Admin: apply all fields including headcount without pending workflow.
    */
   async update(id: string, dto: UpdateOrganizationDto): Promise<Organization | null> {
     const updates: Record<string, unknown> = {};
@@ -353,12 +460,16 @@ export class OrganizationService {
     if (dto.phoneNumber !== undefined) updates.phoneNumber = dto.phoneNumber.trim();
     if (dto.city !== undefined) updates.city = dto.city.trim();
     if (dto.country !== undefined) updates.country = dto.country.trim();
-    if (dto.employeeCount !== undefined) updates.employeeCount = dto.employeeCount;
+    if (dto.logo !== undefined) updates.logo = dto.logo.trim();
+    if (dto.employeeCount !== undefined) {
+      updates.employeeCount = dto.employeeCount;
+    }
     if (dto.departments !== undefined) updates.departments = dto.departments.map((d) => d.trim()).filter(Boolean);
-    const updated = await this.orgModel
-      .findByIdAndUpdate(id, { $set: updates }, { new: true })
-      .lean()
-      .exec();
+    const updatePayload: { $set: Record<string, unknown>; $unset?: Record<string, 1> } = { $set: updates };
+    if (dto.employeeCount !== undefined) {
+      updatePayload.$unset = { pendingEmployeeCount: 1 };
+    }
+    const updated = await this.orgModel.findByIdAndUpdate(id, updatePayload, { new: true }).lean().exec();
     return updated as Organization | null;
   }
 }

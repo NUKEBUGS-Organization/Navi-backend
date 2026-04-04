@@ -49,6 +49,11 @@ export class Organization {
   @Prop({ default: 0 })
   employeeCount?: number;
 
+  /** Headcount change requested by org admin; requires super admin approval. */
+  @ApiProperty({ required: false })
+  @Prop()
+  pendingEmployeeCount?: number;
+
   /** Department names for this organization (e.g. Engineering, HR, Sales). */
   @ApiProperty({ type: [String], required: false })
   @Prop({ type: [String], default: [] })

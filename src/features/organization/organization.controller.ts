@@ -67,7 +67,18 @@ export class OrganizationController {
       throw new HttpException('Not linked to an organization.', HttpStatus.FORBIDDEN);
     }
     const id = typeof orgId === 'string' ? orgId : (orgId as { toString: () => string }).toString();
-    const org = await this.organizationService.update(id, dto);
+    const org = await this.organizationService.updateFromOrgMember(id, dto);
+    if (!org) throw new NotFoundException('Organization not found');
+    return org;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @Post(':id/approve-employee-count')
+  @HttpCode(HttpStatus.OK)
+  async approveEmployeeCount(@Param('id') id: string) {
+    const org = await this.organizationService.approvePendingEmployeeCount(id);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
   }

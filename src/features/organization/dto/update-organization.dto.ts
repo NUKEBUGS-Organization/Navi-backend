@@ -37,6 +37,11 @@ export class UpdateOrganizationDto {
   @IsString()
   country?: string;
 
+  @ApiProperty({ required: false, description: 'Organization logo as data URL or HTTPS URL' })
+  @IsOptional()
+  @IsString()
+  logo?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsNumber()

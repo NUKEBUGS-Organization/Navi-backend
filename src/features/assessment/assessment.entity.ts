@@ -5,6 +5,8 @@ import mongoose from 'mongoose';
 const AssessmentStepSchema = {
   title: { type: String, default: '' },
   questions: [{ type: String }],
+  /** Parallel to questions: N | A | V | I for NAVI scoring when submissions include per-question answers. */
+  pillars: [{ type: String }],
 };
 
 @Schema({ timestamps: true })

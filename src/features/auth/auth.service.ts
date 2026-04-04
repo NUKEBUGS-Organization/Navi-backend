@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomInt } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
@@ -35,6 +36,14 @@ function generateSixDigitOtp(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
 
+function escapeHtmlEmail(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export interface LoginResponse {
   access_token: string;
   user: Partial<User>;
@@ -49,18 +58,60 @@ export class AuthService {
     @InjectModel('PasswordResetOtp') private readonly passwordResetOtpModel: Model<PasswordResetOtp>,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
-   * Placeholder: send login credentials to the new staff member's email.
-   * To be implemented when SMTP is provided. Do not throw; failures should not block user creation.
+   * Sends login credentials to a new org user (manager/employee). Does not throw.
    */
   private async sendLoginCredentialsEmail(
-    _email: string,
-    _name: string,
-    _temporaryPassword: string,
+    email: string,
+    name: string,
+    temporaryPassword: string,
   ): Promise<void> {
-    // TODO: integrate SMTP and send email with login link/credentials
+    const loginBase = (
+      this.config.get<string>('FRONTEND_APP_URL') ?? 'https://app.changewithnavi.com'
+    ).replace(/\/$/, '');
+    const loginUrl = `${loginBase}/`;
+    const greeting = name.trim() || 'there';
+    const text = [
+      `Dear ${greeting},`,
+      '',
+      'Welcome to NAVI.',
+      'An administrator has created an account for you on your organization workspace.',
+      '',
+      `Sign-in URL: ${loginUrl}`,
+      `Username: ${email}`,
+      `Temporary password: ${temporaryPassword}`,
+      '',
+      'For security, please sign in and update your password from Settings when prompted.',
+      '',
+      'Warm regards,',
+      'The NAVI Team',
+    ].join('\n');
+    const html = `<p>Dear ${escapeHtmlEmail(greeting)},</p>
+<p>Welcome to NAVI.</p>
+<p>An administrator has created an account for you on your organization workspace.</p>
+<p><strong>Your Access Details</strong></p>
+<ul>
+<li><strong>Workspace:</strong> <a href="${escapeHtmlEmail(loginUrl)}">${escapeHtmlEmail(loginUrl)}</a></li>
+<li><strong>Username:</strong> ${escapeHtmlEmail(email)}</li>
+<li><strong>Temporary Password:</strong> ${escapeHtmlEmail(temporaryPassword)}</li>
+</ul>
+<p>For security, please sign in and update your password from Settings when prompted.</p>
+<p>Warm regards,<br/>The NAVI Team</p>`;
+    try {
+      await this.mailService.send({
+        to: email.trim(),
+        subject: 'Your NAVI account is ready',
+        text,
+        html,
+      });
+    } catch (e) {
+      this.logger.error(
+        `Staff welcome email to ${email}: ${e instanceof Error ? e.message : e}`,
+      );
+    }
   }
 
   /** Strip password and return safe user object for API responses */
@@ -477,6 +528,13 @@ export class AuthService {
         if (dto.password?.trim()) {
           updatePayload.password = await hashPassword(dto.password);
         }
+        if (dto.photoDataUrl !== undefined) {
+          const s = dto.photoDataUrl.trim();
+          if (s.length > 450000) {
+            throw new HttpException('Profile image is too large.', HttpStatus.BAD_REQUEST);
+          }
+          updatePayload.photoDataUrl = s || null;
+        }
         const updated = await this.userModel
           .findByIdAndUpdate(id, { $set: updatePayload }, { new: true })
           .exec();
@@ -541,6 +599,101 @@ export class AuthService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  async updateMyProfile(
+    userId: string,
+    dto: { name?: string; photoDataUrl?: string },
+  ): Promise<Partial<User> | null> {
+    const updates: Record<string, unknown> = {};
+    if (dto.name !== undefined) updates.name = dto.name.trim();
+    if (dto.photoDataUrl !== undefined) {
+      const s = dto.photoDataUrl.trim();
+      if (s.length > 450000) {
+        throw new HttpException('Profile image is too large.', HttpStatus.BAD_REQUEST);
+      }
+      updates.photoDataUrl = s || null;
+    }
+    if (Object.keys(updates).length === 0) {
+      const u = await this.userModel.findById(userId).exec();
+      return u ? this.sanitizeUser(u) : null;
+    }
+    const updated = await this.userModel.findByIdAndUpdate(userId, { $set: updates }, { new: true }).exec();
+    return updated ? this.sanitizeUser(updated) : null;
+  }
+
+  async bulkImportUsersFromCsv(
+    csvText: string,
+    currentUser: Partial<User>,
+  ): Promise<{ created: number; skipped: number; errors: string[] }> {
+    if (currentUser.role !== UserRole.ADMIN) {
+      throw new HttpException('Only organization admins can bulk import.', HttpStatus.FORBIDDEN);
+    }
+    const orgRaw = currentUser.organizationId;
+    const organizationId =
+      typeof orgRaw === 'string' ? orgRaw : (orgRaw as { toString?: () => string })?.toString?.();
+    if (!organizationId) {
+      throw new HttpException('Not linked to an organization.', HttpStatus.FORBIDDEN);
+    }
+    const lines = csvText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    let created = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+    const start = /^name\s*,/i.test(lines[0] ?? '') ? 1 : 0;
+    for (let i = start; i < lines.length; i++) {
+      const line = lines[i];
+      const parts = line.split(',').map((p) => p.trim().replace(/^"|"$/g, ''));
+      if (parts.length < 3) {
+        errors.push(`Row ${i + 1}: expected name,email,role[,departments]`);
+        skipped++;
+        continue;
+      }
+      const name = parts[0];
+      const email = parts[1]?.toLowerCase() ?? '';
+      const roleStr = (parts[2] ?? '').toLowerCase();
+      const deptPart = parts[3] ?? '';
+      if (!email || !name) {
+        skipped++;
+        continue;
+      }
+      const role =
+        roleStr === 'manager'
+          ? UserRole.MANAGER
+          : roleStr === 'admin'
+            ? UserRole.ADMIN
+            : UserRole.EMPLOYEE;
+      const departments = deptPart
+        .split(';')
+        .map((d) => d.trim())
+        .filter(Boolean);
+      const existing = await this.userModel.findOne({ email }).exec();
+      if (existing) {
+        skipped++;
+        continue;
+      }
+      const tempPass = `Welcome${Math.random().toString(36).slice(2, 10)}!`;
+      try {
+        await this.create(
+          {
+            name,
+            email,
+            password: tempPass,
+            role,
+            departments,
+          },
+          UserRole.ADMIN,
+          currentUser as User,
+        );
+        created++;
+      } catch (e) {
+        errors.push(`Row ${i + 1}: ${e instanceof Error ? e.message : 'failed'}`);
+        skipped++;
+      }
+    }
+    return { created, skipped, errors };
   }
 
   /** Ensure all seeded super admins exist with correct credentials. Creates or resets each. */

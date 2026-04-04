@@ -54,6 +54,11 @@ export class Initiative {
   @Prop({ required: true, default: '' })
   leadName: string;
 
+  /** Executive / change sponsor (display name). */
+  @ApiProperty({ required: false })
+  @Prop({ default: '' })
+  sponsorName?: string;
+
   @ApiProperty()
   @Prop({ default: '' })
   dateRange: string;

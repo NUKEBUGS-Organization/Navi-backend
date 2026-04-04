@@ -41,6 +41,15 @@ export class CommunicationController {
     return this.service.findByOrganization(orgId);
   }
 
+  @Post(':id/send')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async send(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    const orgId = getOrgId(user);
+    if (!orgId) throw new Error('Not linked to an organization.');
+    return this.service.sendEmailNow(id, orgId);
+  }
+
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)

@@ -45,10 +45,21 @@ export class AssessmentService {
     dto: CreateAssessmentDto,
     organizationId: string,
   ): Promise<Assessment> {
-    const steps = (dto.steps ?? []).map((s) => ({
-      title: s.title ?? '',
-      questions: s.questions ?? [],
-    }));
+    const steps = (dto.steps ?? []).map((s) => {
+      const questions = s.questions ?? [];
+      const rawP = s.pillars ?? [];
+      const pillars = questions.map((_, i) => {
+        const p = String(rawP[i] ?? '')
+          .trim()
+          .toUpperCase();
+        return p === 'N' || p === 'A' || p === 'V' || p === 'I' ? p : '';
+      });
+      return {
+        title: s.title ?? '',
+        questions,
+        pillars,
+      };
+    });
     const doc = await this.assessmentModel.create({
       name: dto.name,
       initiativeId: new mongoose.Types.ObjectId(dto.initiativeId),

@@ -15,12 +15,14 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService, LoginResponse } from './auth.service';
 import { User, UserRole } from './user.entity';
 import {
+  BulkImportUsersDto,
   ChangePasswordDto,
   CreateUserDto,
   ForgotPasswordRequestDto,
   LoginDto,
   ResetPasswordDto,
   SignupDto,
+  UpdateProfileDto,
   UpdateUserDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -58,6 +60,22 @@ export class AuthController {
   @Get('me')
   async getProfile(@CurrentUser() user: Partial<User>) {
     return user;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Patch('me/profile')
+  async updateMyProfile(@Body() body: UpdateProfileDto, @CurrentUser() user: Partial<User>) {
+    const raw = (user as { _id?: { toString: () => string } })._id;
+    const userId = raw?.toString?.() ?? (user as { _id?: string })._id;
+    if (!userId) {
+      throw new HttpException('Invalid user.', HttpStatus.BAD_REQUEST);
+    }
+    const updated = await this.authService.updateMyProfile(userId, body);
+    if (!updated) {
+      throw new HttpException('User not found.', HttpStatus.NOT_FOUND);
+    }
+    return updated;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -103,6 +121,15 @@ export class AuthController {
   ) {
     const created = await this.authService.create(user, currentUser.role, currentUser);
     return this.authService.sanitizeUser(created);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Post('users/bulk-import')
+  @HttpCode(HttpStatus.OK)
+  async bulkImportUsers(@Body() dto: BulkImportUsersDto, @CurrentUser() currentUser: Partial<User>) {
+    return this.authService.bulkImportUsersFromCsv(dto.csvText, currentUser);
   }
 
   @Post('signup')
