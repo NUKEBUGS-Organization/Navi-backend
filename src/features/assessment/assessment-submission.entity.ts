@@ -56,6 +56,11 @@ export class AssessmentSubmission {
   @Prop()
   naviIndex?: number;
 
+  /** Unweighted (N+A+V+I)/4; classification still uses weighted `naviIndex`. */
+  @ApiProperty({ required: false })
+  @Prop()
+  naviIndexSimple?: number;
+
   @ApiProperty({ required: false })
   @Prop({ default: '' })
   naviClassification?: string;
