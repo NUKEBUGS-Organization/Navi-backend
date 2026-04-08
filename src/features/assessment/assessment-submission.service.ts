@@ -70,18 +70,26 @@ export class AssessmentSubmissionService {
     let naviV: number | undefined;
     let naviI: number | undefined;
     let naviIndex: number | undefined;
+    let naviIndexSimple: number | undefined;
     let naviClassification: string | undefined;
     let storedAnswers: number[] | undefined;
 
+    const deptList = Array.isArray(initiative.departments) ? initiative.departments.filter((d) => String(d ?? '').trim()) : [];
+    const departmentCount = deptList.length;
+
     if (answers?.length && answers.length === pillarsFlat.length) {
       storedAnswers = answers.map((a) => Math.min(5, Math.max(1, Math.round(Number(a)))));
-      const navi = computeNaviFromAnswers(storedAnswers, pillarsFlat);
+      const navi = computeNaviFromAnswers(storedAnswers, pillarsFlat, {
+        changeType: initiative.changeType,
+        departmentCount,
+      });
       if (navi) {
         naviN = navi.n;
         naviA = navi.a;
         naviV = navi.v;
         naviI = navi.i;
         naviIndex = navi.naviIndex;
+        naviIndexSimple = navi.naviIndexSimple;
         naviClassification = navi.classification;
       }
     }
@@ -99,6 +107,7 @@ export class AssessmentSubmissionService {
       naviV,
       naviI,
       naviIndex,
+      naviIndexSimple,
       naviClassification: naviClassification ?? '',
     });
 
@@ -123,7 +132,10 @@ export class AssessmentSubmissionService {
     avgI: number | null;
     leadershipAvgNavi: number | null;
     employeeAvgNavi: number | null;
+    /** Leadership NAVI − employee NAVI (weighted index). */
     alignmentGap: number | null;
+    /** |alignmentGap| for 0–0.3 / 0.4–0.8 / 0.9+ banding. */
+    alignmentGapMagnitude: number | null;
   }> {
     const list = await this.findSubmissionsByQuery({
       organizationId: new mongoose.Types.ObjectId(organizationId),
@@ -140,6 +152,7 @@ export class AssessmentSubmissionService {
         leadershipAvgNavi: null,
         employeeAvgNavi: null,
         alignmentGap: null,
+        alignmentGapMagnitude: null,
       };
     }
     const avg = (fn: (x: AssessmentSubmission) => number | undefined) => {
@@ -159,7 +172,7 @@ export class AssessmentSubmissionService {
     }
     const leadershipSubs = withNavi.filter((s) => {
       const r = roleByUserId[String(s.userId)] ?? '';
-      return r === 'admin' || r === 'manager';
+      return r === 'admin' || r === 'manager' || r === 'super_admin';
     });
     const employeeSubs = withNavi.filter((s) => {
       const r = roleByUserId[String(s.userId)] ?? '';
@@ -170,8 +183,10 @@ export class AssessmentSubmissionService {
     const lAvg = avgIdx(leadershipSubs);
     const eAvg = avgIdx(employeeSubs);
     let alignmentGap: number | null = null;
+    let alignmentGapMagnitude: number | null = null;
     if (lAvg != null && eAvg != null) {
-      alignmentGap = Math.round(Math.abs(lAvg - eAvg) * 100) / 100;
+      alignmentGap = Math.round((lAvg - eAvg) * 100) / 100;
+      alignmentGapMagnitude = Math.round(Math.abs(alignmentGap) * 100) / 100;
     }
     return {
       submissionCount: list.length,
@@ -183,6 +198,7 @@ export class AssessmentSubmissionService {
       leadershipAvgNavi: lAvg,
       employeeAvgNavi: eAvg,
       alignmentGap,
+      alignmentGapMagnitude,
     };
   }
 
