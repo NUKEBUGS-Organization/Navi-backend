@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import mongoose from 'mongoose';
@@ -298,6 +298,81 @@ export class KudosService {
     ).exec();
 
     return this.kudosModel.findOne({ _id: new mongoose.Types.ObjectId(contributionId) }).lean().exec();
+  }
+
+  /** Create a discretionary manager/admin star for an employee on an initiative (not tied to task/comment/assessment chain). */
+  async createManagerDirectAward(
+    currentUser: Partial<User>,
+    initiativeId: string,
+    employeeId: string,
+    note?: string,
+  ): Promise<any> {
+    const role = currentUser.role as UserRole | undefined;
+    if (!role || !(role === UserRole.MANAGER || role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN)) {
+      throw new ForbiddenException('Only managers or admins can create kudos.');
+    }
+
+    const orgIdStr = this.orgIdToString(currentUser.organizationId);
+    if (!orgIdStr) throw new ForbiddenException('Not linked to an organization.');
+    const requesterId = this.orgIdToString(currentUser._id as unknown);
+    if (!requesterId) throw new ForbiddenException('Missing user id.');
+
+    if (!(await this.isEmployee(employeeId))) {
+      throw new BadRequestException('Kudos can only be given to employees.');
+    }
+
+    if (role === UserRole.MANAGER) {
+      const managerDeptSet = new Set((currentUser.departments ?? []).map((d) => String(d).toLowerCase()));
+      const employee = await this.userModel
+        .findOne({
+          _id: new mongoose.Types.ObjectId(employeeId),
+          organizationId: new mongoose.Types.ObjectId(orgIdStr),
+        })
+        .select('departments role')
+        .lean()
+        .exec();
+      if (!employee || (employee as { role?: string }).role !== UserRole.EMPLOYEE) {
+        throw new ForbiddenException('Employee not found in your organization.');
+      }
+      const employeeDepts: string[] = (employee as { departments?: string[] }).departments ?? [];
+      const intersects = employeeDepts.some((d) => managerDeptSet.has(String(d).toLowerCase()));
+      if (!intersects) throw new ForbiddenException('Not allowed for this employee.');
+    }
+
+    const initiative = await this.initiativeService.findOne(initiativeId, orgIdStr);
+    if (!initiative) throw new NotFoundException('Initiative not found.');
+
+    const trimmed = note?.trim();
+    const created = await this.kudosModel.create({
+      initiativeId: new mongoose.Types.ObjectId(initiativeId),
+      organizationId: new mongoose.Types.ObjectId(orgIdStr),
+      employeeId: new mongoose.Types.ObjectId(employeeId),
+      contributionType: 'manager_award',
+      systemStars: 0,
+      managerStars: 1,
+      managerId: new mongoose.Types.ObjectId(requesterId),
+      contributionTitle: 'Manager recognition',
+      contributionSubtitle: trimmed || 'Recognized by your manager',
+    });
+
+    const c = created.toObject();
+    const emp = await this.userModel
+      .findById(new mongoose.Types.ObjectId(employeeId))
+      .select('name')
+      .lean()
+      .exec();
+    return {
+      _id: c._id.toString(),
+      employeeId,
+      employeeName: (emp as { name?: string } | null)?.name ?? 'Employee',
+      contributionType: c.contributionType,
+      contributionTitle: c.contributionTitle,
+      contributionSubtitle: c.contributionSubtitle,
+      systemStars: c.systemStars ?? 0,
+      managerStars: c.managerStars ?? 0,
+      managerId: requesterId,
+      createdAt: c.createdAt,
+    };
   }
 }
 

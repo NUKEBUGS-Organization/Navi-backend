@@ -14,48 +14,82 @@ export type AssessmentTemplateDef = {
   steps: TemplateStep[];
 };
 
-/** Pre-change leadership-style NAVI template (condensed from UAT question bank). */
+const repeat = <T,>(n: number, v: T): T[] => Array.from({ length: n }, () => v);
+
+/** Full NAVI / change readiness bank (aligned with application assessment form categories). */
 export const NAVI_ASSESSMENT_TEMPLATES: AssessmentTemplateDef[] = [
   {
     id: 'navi-pre-change-leadership',
     name: 'NAVI — Pre-change (Leadership)',
-    description: 'Readiness and alignment across Navigate, Activate, Validate, and Institutionalize pillars.',
+    description:
+      'Full readiness assessment: leadership, communication, stakeholders, resources, process & systems, and culture (NAVI-scored).',
     steps: [
       {
-        title: 'N — Navigate (Leadership alignment)',
+        title: 'Leadership Alignment',
         questions: [
-          'Leadership has a clearly defined vision for this change.',
-          'Leaders are aligned on the purpose and expected outcomes.',
-          'Executive sponsorship is visible and active.',
+          'To what extent has the leadership team communicated a shared vision for this change?',
+          'How visible is executive sponsorship for the initiative across the organization?',
+          'How well do leaders model the behaviors expected from the change?',
         ],
         pillars: ['N', 'N', 'N'],
       },
       {
-        title: 'A — Activate (Culture)',
+        title: 'Communication Readiness',
         questions: [
-          'Employees understand why this change is necessary.',
-          'There is trust in leadership to lead this change.',
-          'Communication about the change is clear and consistent.',
+          'How clear is the messaging about why this change is needed?',
+          'How often do employees receive updates on the initiative?',
+          'How well are different channels (email, meetings, etc.) used for communication?',
+          'To what extent do employees feel they can ask questions about the change?',
+          'How consistent is the change narrative across leaders?',
+          'How well are milestones and successes communicated?',
+          'How accessible is information about the change to frontline staff?',
+          'How would you rate the overall change communication plan?',
         ],
-        pillars: ['A', 'A', 'A'],
+        pillars: repeat(8, 'A') as NaviPillar[],
       },
       {
-        title: 'V — Validate (Execution)',
+        title: 'Stakeholder Engagement',
         questions: [
-          'Adequate resources are allocated for this change.',
-          'Managers are capable of leading their teams through change.',
-          'There is a clear implementation roadmap.',
+          'How well have key stakeholders been identified?',
+          'How engaged are resistant stakeholders in the change process?',
+          'How effective are the feedback mechanisms for stakeholders?',
+          'To what extent are stakeholder concerns being addressed?',
+          'How strong are the relationships between the change team and key stakeholders?',
         ],
-        pillars: ['V', 'V', 'V'],
+        pillars: repeat(5, 'N') as NaviPillar[],
       },
       {
-        title: 'I — Institutionalize',
+        title: 'Resource Availability',
         questions: [
-          'Success metrics for the change are clearly defined.',
-          'Ownership for sustaining the change is assigned.',
-          'Reinforcement mechanisms are planned.',
+          'How adequate is the budget allocated for this initiative?',
+          'How available are key people to work on the change?',
+          'How well do teams have the skills needed for the change?',
+          'How realistic is the timeline given other priorities?',
+          'How sufficient are tools and technology to support the change?',
         ],
-        pillars: ['I', 'I', 'I'],
+        pillars: repeat(5, 'V') as NaviPillar[],
+      },
+      {
+        title: 'Process & Systems Readiness',
+        questions: [
+          'How well are current processes documented?',
+          'How ready are systems for the planned changes?',
+          'How clear are the process change requirements?',
+          'How integrated are the systems that need to work together?',
+          'How well do workflows support the new way of working?',
+        ],
+        pillars: repeat(5, 'V') as NaviPillar[],
+      },
+      {
+        title: 'Cultural Readiness',
+        questions: [
+          'How open is the culture to trying new approaches?',
+          'How strong is psychological safety for voicing concerns?',
+          'How well does the culture support collaboration across teams?',
+          'To what extent do employees feel ownership of the change?',
+          'How aligned is the culture with the desired future state?',
+        ],
+        pillars: ['A', 'A', 'A', 'I', 'I'],
       },
     ],
   },

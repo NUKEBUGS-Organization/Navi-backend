@@ -86,6 +86,8 @@ export class AuthService {
       '',
       'For security, please sign in and update your password from Settings when prompted.',
       '',
+      'Schedule your onboarding call with NAVI: https://zbooking.us/F2RUo',
+      '',
       'Warm regards,',
       'The NAVI Team',
     ].join('\n');
@@ -99,6 +101,7 @@ export class AuthService {
 <li><strong>Temporary Password:</strong> ${escapeHtmlEmail(temporaryPassword)}</li>
 </ul>
 <p>For security, please sign in and update your password from Settings when prompted.</p>
+<p><strong>Onboarding call:</strong> <a href="https://zbooking.us/F2RUo">Book your NAVI onboarding session</a></p>
 <p>Warm regards,<br/>The NAVI Team</p>`;
     try {
       await this.mailService.send({

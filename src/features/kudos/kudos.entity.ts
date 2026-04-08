@@ -2,7 +2,11 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import mongoose from 'mongoose';
 
-export type KudosContributionType = 'task_completed' | 'task_comment' | 'assessment_submitted';
+export type KudosContributionType =
+  | 'task_completed'
+  | 'task_comment'
+  | 'assessment_submitted'
+  | 'manager_award';
 
 @Schema({ timestamps: true })
 export class KudosContribution {
@@ -22,7 +26,9 @@ export class KudosContribution {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
   employeeId: mongoose.Types.ObjectId;
 
-  @ApiProperty({ enum: ['task_completed', 'task_comment', 'assessment_submitted'] })
+  @ApiProperty({
+    enum: ['task_completed', 'task_comment', 'assessment_submitted', 'manager_award'],
+  })
   @Prop({ type: String, required: true })
   contributionType: KudosContributionType;
 

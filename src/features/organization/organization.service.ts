@@ -111,6 +111,7 @@ export class OrganizationService {
       pendingEmployeeCount?: number;
       email?: string;
       country?: string;
+      industry?: string;
     }[]
   > {
     const orgs = await this.orgModel.find().sort({ createdAt: -1 }).lean().exec();
@@ -135,6 +136,7 @@ export class OrganizationService {
         employeeCount?: number;
         email?: string;
         country?: string;
+        industry?: string;
         pendingEmployeeCount?: number;
       };
       const departments = o.departments ?? [];
@@ -150,6 +152,7 @@ export class OrganizationService {
         pendingEmployeeCount: o.pendingEmployeeCount,
         email: o.email,
         country: o.country,
+        industry: o.industry,
       };
     });
   }

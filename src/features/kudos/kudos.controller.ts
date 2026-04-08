@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -6,6 +6,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User, UserRole } from '../auth/user.entity';
 import { KudosService } from './kudos.service';
+import { CreateManagerKudosDto } from './dto/create-manager-kudos.dto';
 
 @ApiTags('kudos')
 @Controller('kudos')
@@ -49,6 +50,12 @@ export class KudosController {
     @Param('contributionId') contributionId: string,
   ) {
     return this.kudosService.awardManagerStar(user, contributionId);
+  }
+
+  @Post('manager-award')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN)
+  async createManagerAward(@CurrentUser() user: Partial<User>, @Body() dto: CreateManagerKudosDto) {
+    return this.kudosService.createManagerDirectAward(user, dto.initiativeId, dto.employeeId, dto.note);
   }
 }
 
