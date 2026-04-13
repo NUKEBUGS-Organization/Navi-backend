@@ -63,6 +63,16 @@ export class CreateOrganizationDto {
   employeeCount?: number;
 
   @ApiProperty({
+    example: 100,
+    required: false,
+    description: 'Max employees org admins/managers may add (super admin can change later).',
+  })
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  maxEmployeeSeats?: number;
+
+  @ApiProperty({
     example: ['Engineering', 'HR', 'Sales'],
     required: false,
     description: 'Department names for this organization',

@@ -1,6 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { IsArray, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Length, Matches, MinLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { UserRole } from '../user.entity';
 import mongoose from 'mongoose';
 
@@ -15,10 +26,16 @@ export class CreateUserDto {
   @IsNotEmpty()
   email: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false, description: 'Optional for employees — server uses OrganizationName@{n}.' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  password: string;
+  @MinLength(8, { message: 'Password must be at least 8 characters when provided' })
+  password?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
 
   @ApiProperty({ enum: UserRole, required: false })
   @IsOptional()
@@ -67,6 +84,11 @@ export class UpdateUserDto {
   @ApiProperty({ required: false })
   isActive?: boolean;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
   @ApiProperty({ required: false, description: 'Profile image as data URL (max ~400KB)' })
   @IsOptional()
   @IsString()
@@ -86,10 +108,32 @@ export class UpdateProfileDto {
 }
 
 export class BulkImportUsersDto {
-  @ApiProperty({ description: 'CSV rows: name,email,role,departments (departments semicolon-separated). Header optional.' })
+  @ApiProperty({
+    description:
+      'CSV: name,email,phone,role,departments (phone optional; departments semicolon-separated). Or name,email,role,departments. Header optional.',
+  })
   @IsString()
   @IsNotEmpty()
   csvText: string;
+}
+
+export class AccessEmailEntryDto {
+  @ApiProperty()
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ description: 'Plain password to include in the email (e.g. from import preview).' })
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+}
+
+export class SendAccessEmailsDto {
+  @ApiProperty({ type: [AccessEmailEntryDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AccessEmailEntryDto)
+  entries: AccessEmailEntryDto[];
 }
 
 export class SignupDto {

@@ -21,6 +21,7 @@ import {
   ForgotPasswordRequestDto,
   LoginDto,
   ResetPasswordDto,
+  SendAccessEmailsDto,
   SignupDto,
   UpdateProfileDto,
   UpdateUserDto,
@@ -110,9 +111,9 @@ export class AuthController {
     return this.authService.findOne(id);
   }
 
-  /** Super admin: create admins. Org admin: create admins/managers/employees for their org. */
+  /** Super admin: create admins. Org admin/manager: create users for their org. */
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER)
   @ApiBearerAuth()
   @Post('users')
   async createUser(
@@ -124,12 +125,21 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiBearerAuth()
   @Post('users/bulk-import')
   @HttpCode(HttpStatus.OK)
   async bulkImportUsers(@Body() dto: BulkImportUsersDto, @CurrentUser() currentUser: Partial<User>) {
     return this.authService.bulkImportUsersFromCsv(dto.csvText, currentUser);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiBearerAuth()
+  @Post('users/send-access-emails')
+  @HttpCode(HttpStatus.OK)
+  async sendAccessEmails(@Body() dto: SendAccessEmailsDto, @CurrentUser() currentUser: Partial<User>) {
+    return this.authService.sendAccessEmails(dto, currentUser);
   }
 
   @Post('signup')
@@ -159,7 +169,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER)
   @ApiBearerAuth()
   @Patch('users/:id')
   async update(
@@ -172,7 +182,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER)
   @ApiBearerAuth()
   @Delete('users/:id')
   async delete(

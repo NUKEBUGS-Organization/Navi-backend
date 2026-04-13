@@ -108,6 +108,7 @@ export class OrganizationService {
       departments: string[];
       departmentCount: number;
       employeeCount: number;
+      maxEmployeeSeats?: number;
       pendingEmployeeCount?: number;
       email?: string;
       country?: string;
@@ -134,6 +135,7 @@ export class OrganizationService {
         createdAt: Date;
         departments?: string[];
         employeeCount?: number;
+        maxEmployeeSeats?: number;
         email?: string;
         country?: string;
         industry?: string;
@@ -149,6 +151,7 @@ export class OrganizationService {
         departments,
         departmentCount: departments.length,
         employeeCount: o.employeeCount ?? 0,
+        maxEmployeeSeats: o.maxEmployeeSeats ?? 100,
         pendingEmployeeCount: o.pendingEmployeeCount,
         email: o.email,
         country: o.country,
@@ -281,6 +284,7 @@ export class OrganizationService {
       country: dto.country,
       industry: dto.industry,
       employeeCount: dto.employeeCount ?? 0,
+      maxEmployeeSeats: dto.maxEmployeeSeats ?? 100,
       departments: dto.departments ?? [],
       employees: [],
       managers: [],
@@ -466,6 +470,9 @@ export class OrganizationService {
     if (dto.logo !== undefined) updates.logo = dto.logo.trim();
     if (dto.employeeCount !== undefined) {
       updates.employeeCount = dto.employeeCount;
+    }
+    if (dto.maxEmployeeSeats !== undefined) {
+      updates.maxEmployeeSeats = Math.max(1, Math.floor(dto.maxEmployeeSeats));
     }
     if (dto.departments !== undefined) updates.departments = dto.departments.map((d) => d.trim()).filter(Boolean);
     const updatePayload: { $set: Record<string, unknown>; $unset?: Record<string, 1> } = { $set: updates };

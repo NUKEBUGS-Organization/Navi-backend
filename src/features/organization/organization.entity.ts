@@ -54,6 +54,11 @@ export class Organization {
   @Prop()
   pendingEmployeeCount?: number;
 
+  /** Max active employees org admins/managers may have; super admin can raise (default 100). */
+  @ApiProperty({ required: false })
+  @Prop({ default: 100 })
+  maxEmployeeSeats?: number;
+
   /** Department names for this organization (e.g. Engineering, HR, Sales). */
   @ApiProperty({ type: [String], required: false })
   @Prop({ type: [String], default: [] })

@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import mongoose from 'mongoose';
@@ -38,7 +38,43 @@ export class TaskService {
     const assigneeId = new mongoose.Types.ObjectId(dto.assigneeId);
     const progress = dto.progress ?? 0;
     const status = statusFromProgress(progress);
-    const adoptionMilestoneId = dto.adoptionMilestoneId ? new mongoose.Types.ObjectId(dto.adoptionMilestoneId) : undefined;
+
+    const trackingOn = (initiative as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled !== false;
+    let adoptionMilestoneId: mongoose.Types.ObjectId | undefined;
+    if (trackingOn) {
+      const adoptionCount = await this.adoptionModel.countDocuments({
+        initiativeId: initId,
+        organizationId: orgId,
+      });
+      if (adoptionCount === 0) {
+        throw new BadRequestException(
+          'Adoption tracking is enabled, but this initiative has no adoption milestones yet. Add milestones on Adoption Tracking before creating tasks.',
+        );
+      }
+      const rawId = dto.adoptionMilestoneId?.trim();
+      if (!rawId) {
+        throw new BadRequestException('Select an adoption milestone for this task.');
+      }
+      let milestoneOid: mongoose.Types.ObjectId;
+      try {
+        milestoneOid = new mongoose.Types.ObjectId(rawId);
+      } catch {
+        throw new BadRequestException('Invalid adoption milestone id.');
+      }
+      const adoptionDoc = await this.adoptionModel
+        .findOne({ _id: milestoneOid, initiativeId: initId, organizationId: orgId })
+        .lean()
+        .exec();
+      if (!adoptionDoc) {
+        throw new BadRequestException('Adoption milestone must belong to this initiative.');
+      }
+      adoptionMilestoneId = milestoneOid;
+    } else {
+      adoptionMilestoneId = dto.adoptionMilestoneId?.trim()
+        ? new mongoose.Types.ObjectId(dto.adoptionMilestoneId.trim())
+        : undefined;
+    }
+
     const doc = await this.taskModel.create({
       initiativeId: initId,
       organizationId: orgId,

@@ -22,6 +22,10 @@ export class User {
   @Prop()
   email: string;
 
+  @ApiProperty({ required: false })
+  @Prop({ default: '' })
+  phoneNumber?: string;
+
   @ApiProperty()
   @Prop({ select: false })
   password: string;

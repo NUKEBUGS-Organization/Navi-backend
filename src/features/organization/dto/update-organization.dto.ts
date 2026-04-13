@@ -48,6 +48,12 @@ export class UpdateOrganizationDto {
   @Min(0)
   employeeCount?: number;
 
+  @ApiProperty({ required: false, description: 'Cap on employees (super admin); admins cannot set via PATCH /me.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  maxEmployeeSeats?: number;
+
   @ApiProperty({ type: [String], required: false, description: 'Department names' })
   @IsOptional()
   @IsArray()
