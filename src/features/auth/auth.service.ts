@@ -115,6 +115,22 @@ export class AuthService {
     return sanitizeOrgNameForPassword(name);
   }
 
+  private async normalizeEmailForUpdate(id: string, emailRaw: string): Promise<string> {
+    const email = emailRaw.trim().toLowerCase();
+    if (!email) {
+      throw new HttpException('Email is required.', HttpStatus.BAD_REQUEST);
+    }
+    const dup = await this.userModel
+      .findOne({ email, _id: { $ne: id } })
+      .select('_id')
+      .lean()
+      .exec();
+    if (dup) {
+      throw new HttpException('Email already in use.', HttpStatus.BAD_REQUEST);
+    }
+    return email;
+  }
+
   /**
    * Sends login credentials to a new org user (manager/employee). Does not throw.
    */
@@ -193,9 +209,12 @@ export class AuthService {
     }
     const payload = { sub: (user as User & { _id: string })._id.toString(), email: user.email };
     const access_token = this.jwtService.sign(payload);
+    const now = new Date();
+    await this.userModel.updateOne({ _id: user._id }, { $set: { lastActiveAt: now } }).exec();
+    const safeUser = this.sanitizeUser(user);
     return {
       access_token,
-      user: this.sanitizeUser(user),
+      user: { ...safeUser, lastActiveAt: now },
     };
   }
 
@@ -647,12 +666,15 @@ export class AuthService {
             : undefined;
         const updatePayload: Record<string, unknown> = {};
         if (dto.name !== undefined) updatePayload.name = dto.name;
-        if (dto.email !== undefined) updatePayload.email = dto.email;
+        if (dto.email !== undefined) updatePayload.email = await this.normalizeEmailForUpdate(id, dto.email);
         if (allowedRole !== undefined) updatePayload.role = allowedRole;
         if (dto.departments !== undefined) updatePayload.departments = dto.departments;
         if (dto.isActive !== undefined) updatePayload.isActive = dto.isActive;
         if (dto.phoneNumber !== undefined) updatePayload.phoneNumber = dto.phoneNumber.trim();
         if (dto.password?.trim()) {
+          if (dto.password.trim().length < 8) {
+            throw new HttpException('Password must be at least 8 characters.', HttpStatus.BAD_REQUEST);
+          }
           updatePayload.password = await hashPassword(dto.password);
         }
         if (dto.photoDataUrl !== undefined) {
@@ -698,12 +720,15 @@ export class AuthService {
           dto.role === UserRole.MANAGER || dto.role === UserRole.EMPLOYEE ? dto.role : undefined;
         const updatePayload: Record<string, unknown> = {};
         if (dto.name !== undefined) updatePayload.name = dto.name;
-        if (dto.email !== undefined) updatePayload.email = dto.email;
+        if (dto.email !== undefined) updatePayload.email = await this.normalizeEmailForUpdate(id, dto.email);
         if (allowedRole !== undefined) updatePayload.role = allowedRole;
         if (dto.departments !== undefined) updatePayload.departments = dto.departments;
         if (dto.isActive !== undefined) updatePayload.isActive = dto.isActive;
         if (dto.phoneNumber !== undefined) updatePayload.phoneNumber = dto.phoneNumber.trim();
         if (dto.password?.trim()) {
+          if (dto.password.trim().length < 8) {
+            throw new HttpException('Password must be at least 8 characters.', HttpStatus.BAD_REQUEST);
+          }
           updatePayload.password = await hashPassword(dto.password);
         }
         if (dto.photoDataUrl !== undefined) {
@@ -720,7 +745,13 @@ export class AuthService {
       }
 
       const payload: Record<string, unknown> = { ...dto } as Record<string, unknown>;
+      if (typeof payload.email === 'string') {
+        payload.email = await this.normalizeEmailForUpdate(id, payload.email);
+      }
       if (typeof payload.password === 'string' && payload.password.trim()) {
+        if (payload.password.trim().length < 8) {
+          throw new HttpException('Password must be at least 8 characters.', HttpStatus.BAD_REQUEST);
+        }
         payload.password = await hashPassword(payload.password as string);
       }
       const updated = await this.userModel

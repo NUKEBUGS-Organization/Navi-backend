@@ -46,6 +46,10 @@ export class User {
   @Prop({ default: true })
   isActive?: boolean;
 
+  @ApiProperty({ required: false })
+  @Prop({ required: false })
+  lastActiveAt?: Date;
+
   /** Optional profile image as data URL (keep under ~400KB). */
   @ApiProperty({ required: false })
   @Prop()
