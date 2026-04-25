@@ -113,19 +113,36 @@ export class OrganizationService {
       email?: string;
       country?: string;
       industry?: string;
+      adminId?: string;
+      adminEmail?: string;
+      adminLastActiveAt?: Date | null;
     }[]
   > {
     const orgs = await this.orgModel.find().sort({ createdAt: -1 }).lean().exec();
     const orgIds = orgs.map((o) => (o as { _id: mongoose.Types.ObjectId })._id);
     const admins = await this.userModel
       .find({ role: UserRole.ADMIN, organizationId: { $in: orgIds } })
-      .select('name organizationId')
+      .select('_id name email lastActiveAt organizationId')
       .lean()
       .exec();
-    const adminByOrgId: Record<string, string> = {};
+    const adminByOrgId: Record<string, { adminName: string; adminId: string; adminEmail?: string; adminLastActiveAt?: Date | null }> = {};
     for (const a of admins) {
-      const oid = (a as { organizationId?: { toString: () => string } }).organizationId?.toString();
-      if (oid) adminByOrgId[oid] = (a as { name: string }).name;
+      const aa = a as {
+        _id: { toString: () => string };
+        organizationId?: { toString: () => string };
+        name: string;
+        email?: string;
+        lastActiveAt?: Date | null;
+      };
+      const oid = aa.organizationId?.toString();
+      if (oid) {
+        adminByOrgId[oid] = {
+          adminName: aa.name,
+          adminId: aa._id.toString(),
+          adminEmail: aa.email,
+          adminLastActiveAt: aa.lastActiveAt ?? null,
+        };
+      }
     }
     return orgs.map((org) => {
       const o = org as {
@@ -142,10 +159,11 @@ export class OrganizationService {
         pendingEmployeeCount?: number;
       };
       const departments = o.departments ?? [];
+      const admin = adminByOrgId[o._id.toString()];
       return {
         id: o._id.toString(),
         name: o.name,
-        adminName: adminByOrgId[o._id.toString()] ?? '—',
+        adminName: admin?.adminName ?? '—',
         status: o.status ?? 'ACTIVE',
         createdAt: o.createdAt,
         departments,
@@ -156,6 +174,9 @@ export class OrganizationService {
         email: o.email,
         country: o.country,
         industry: o.industry,
+        adminId: admin?.adminId,
+        adminEmail: admin?.adminEmail,
+        adminLastActiveAt: admin?.adminLastActiveAt ?? null,
       };
     });
   }
