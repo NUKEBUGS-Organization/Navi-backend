@@ -3,7 +3,10 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import 'dotenv/config';
+
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv/config');
+}
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -23,7 +26,6 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-
   const config = new DocumentBuilder()
     .setTitle('Navi API')
     .setDescription('The Navi API description')
@@ -32,7 +34,6 @@ async function bootstrap() {
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, documentFactory);
-
   const port = parseInt(String(process.env.PORT ?? 3000), 10) || 3000;
   await app.listen(port, '0.0.0.0');
 }
