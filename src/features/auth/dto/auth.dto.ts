@@ -189,13 +189,24 @@ export class ResetPasswordDto {
 }
 
 export class ChangePasswordDto {
-  @ApiProperty()
-  email: string;
+  @ApiProperty({ required: false, description: 'Optional; server uses the authenticated user email.' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  @IsEmail()
+  email?: string;
 
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty({ message: 'Current password is required' })
   oldPassword: string;
 
   @ApiProperty()
+  @IsString()
+  @MinLength(12, { message: 'Password must be at least 12 characters' })
+  @Matches(/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/, {
+    message:
+      'Password must include at least one uppercase letter, one number, and one special character',
+  })
   newPassword: string;
 }
 

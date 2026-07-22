@@ -602,13 +602,26 @@ export class AuthService {
     changePasswordDto: ChangePasswordDto,
   ): Promise<User | null> {
     try {
+      const email = (changePasswordDto.email ?? '').trim().toLowerCase();
+      if (!email) {
+        throw new HttpException(
+          'Email is required to change password.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const user = await this.userModel
-        .findOne({ email: changePasswordDto.email.trim().toLowerCase() })
+        .findOne({ email })
         .select('+password');
       if (!user) {
         throw new HttpException(
           'User not found with the provided email.',
           HttpStatus.NOT_FOUND,
+        );
+      }
+      if (!user.password) {
+        throw new HttpException(
+          'This account has no password set. Use forgot password instead.',
+          HttpStatus.BAD_REQUEST,
         );
       }
       const isValid = await comparePassword(
@@ -619,6 +632,12 @@ export class AuthService {
         throw new HttpException(
           'Old password is incorrect.',
           HttpStatus.UNAUTHORIZED,
+        );
+      }
+      if (changePasswordDto.oldPassword === changePasswordDto.newPassword) {
+        throw new HttpException(
+          'New password must be different from the current password.',
+          HttpStatus.BAD_REQUEST,
         );
       }
       user.password = await hashPassword(changePasswordDto.newPassword);

@@ -164,8 +164,22 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('change-password')
-  async changePassword(@Body() body: ChangePasswordDto): Promise<User | null> {
-    return this.authService.ChangePassword(body);
+  async changePassword(
+    @Body() body: ChangePasswordDto,
+    @CurrentUser() currentUser: Partial<User>,
+  ): Promise<Partial<User> | null> {
+    const email =
+      (typeof currentUser.email === 'string' && currentUser.email.trim()) ||
+      (typeof body.email === 'string' && body.email.trim()) ||
+      '';
+    if (!email) {
+      throw new HttpException('Authenticated user email is required.', HttpStatus.BAD_REQUEST);
+    }
+    const updated = await this.authService.ChangePassword({
+      ...body,
+      email,
+    });
+    return updated ? this.authService.sanitizeUser(updated) : null;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
