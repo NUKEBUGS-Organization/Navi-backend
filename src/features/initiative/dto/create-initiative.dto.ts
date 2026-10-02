@@ -137,6 +137,16 @@ export class CreateInitiativeDto {
   @IsString({ each: true })
   raciInformedIds?: string[];
 
+  @ApiProperty({ required: false, description: 'Health, Safety & Environment implications' })
+  @IsOptional()
+  @IsBoolean()
+  hseImpact?: boolean;
+
+  @ApiProperty({ required: false, description: 'Food safety implications' })
+  @IsOptional()
+  @IsBoolean()
+  foodSafetyImpact?: boolean;
+
   @ApiProperty({ type: [InitiativeGoalDto], required: false })
   @IsOptional()
   @IsArray()

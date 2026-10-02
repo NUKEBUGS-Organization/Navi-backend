@@ -15,6 +15,27 @@ import {
 import { UserRole } from '../user.entity';
 import mongoose from 'mongoose';
 
+/**
+ * One password policy for every password a user chooses (reset + change), mirrored in the
+ * frontend checklist (Navi-frontend/src/components/ui/PasswordRequirements.tsx).
+ * Trimmed like LoginDto.password, so a stray space can't create a password that login rejects.
+ */
+export const STRONG_PASSWORD_DESCRIPTION =
+  'At least 12 characters, with an uppercase letter, a number and a special character (e.g. ! @ # $ %).';
+
+function StrongPassword(): PropertyDecorator {
+  return (target, key) => {
+    Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))(target, key);
+    IsString()(target, key);
+    MinLength(12, { message: 'Password must be at least 12 characters long' })(target, key);
+    Matches(/[A-Z]/, { message: 'Password must include an uppercase letter (A-Z)' })(target, key);
+    Matches(/\d/, { message: 'Password must include a number (0-9)' })(target, key);
+    Matches(/[^A-Za-z0-9\s]/, {
+      message: 'Password must include a special character such as ! @ # $ %',
+    })(target, key);
+  };
+}
+
 export class CreateUserDto {
   @ApiProperty()
   @IsString()
@@ -182,9 +203,8 @@ export class ResetPasswordDto {
   @Matches(/^\d{6}$/, { message: 'OTP must be 6 digits' })
   otp: string;
 
-  @ApiProperty()
-  @IsString()
-  @MinLength(8, { message: 'Password must be at least 8 characters' })
+  @ApiProperty({ description: STRONG_PASSWORD_DESCRIPTION })
+  @StrongPassword()
   newPassword: string;
 }
 
@@ -200,13 +220,8 @@ export class ChangePasswordDto {
   @IsNotEmpty({ message: 'Current password is required' })
   oldPassword: string;
 
-  @ApiProperty()
-  @IsString()
-  @MinLength(12, { message: 'Password must be at least 12 characters' })
-  @Matches(/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/, {
-    message:
-      'Password must include at least one uppercase letter, one number, and one special character',
-  })
+  @ApiProperty({ description: STRONG_PASSWORD_DESCRIPTION })
+  @StrongPassword()
   newPassword: string;
 }
 

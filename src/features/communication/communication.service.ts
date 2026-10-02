@@ -112,7 +112,11 @@ export class CommunicationService {
     return active.map((u) => String(u.email).trim());
   }
 
-  async sendEmailNow(id: string, organizationId: string): Promise<Communication | null> {
+  async sendEmailNow(
+    id: string,
+    organizationId: string,
+    sender?: { name?: string; email?: string },
+  ): Promise<Communication | null> {
     const oid = new mongoose.Types.ObjectId(organizationId);
     const doc = await this.model
       .findOne({ _id: new mongoose.Types.ObjectId(id), organizationId: oid })
@@ -131,11 +135,22 @@ export class CommunicationService {
     }
     const subject = `[NAVI] ${c.title}`;
     const text = (c.message ?? '').trim() || '(No message body)';
-    const html = `<p><strong>${c.title}</strong></p><p style="white-space:pre-wrap">${text.replace(/</g, '&lt;')}</p>`;
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const senderName = sender?.name?.trim();
+    const signature = senderName ? `<p style="color:#666">— ${esc(senderName)}</p>` : '';
+    const html = `<p><strong>${esc(c.title ?? '')}</strong></p><p style="white-space:pre-wrap">${esc(text)}</p>${signature}`;
     let sent = 0;
     for (const to of recipients) {
       try {
-        await this.mailService.send({ to, subject, text, html });
+        // Show the sending admin/manager as the sender (address stays on the verified domain).
+        await this.mailService.send({
+          to,
+          subject,
+          text,
+          html,
+          fromName: senderName,
+          replyTo: sender?.email?.trim() || undefined,
+        });
         sent += 1;
       } catch (e) {
         this.logger.warn(`Mail to ${to}: ${e instanceof Error ? e.message : e}`);

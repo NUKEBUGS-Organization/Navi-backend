@@ -38,6 +38,11 @@ export class Initiative {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true })
   organizationId: mongoose.Types.ObjectId;
 
+  /** User who created the initiative. A DRAFT is visible only to admins and its creator. */
+  @ApiProperty({ required: false })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, required: false })
+  createdById?: mongoose.Types.ObjectId;
+
   @ApiProperty()
   @Prop({ required: true })
   title: string;
@@ -103,6 +108,15 @@ export class Initiative {
   @ApiProperty({ required: false, type: [String] })
   @Prop({ type: [String], default: [] })
   raciInformedIds: string[];
+
+  /** Risk & compliance flags surfaced in the initiative overview and Risk Monitoring pre-flight checklist. */
+  @ApiProperty({ required: false, default: false, description: 'Initiative has Health, Safety & Environment implications' })
+  @Prop({ default: false })
+  hseImpact?: boolean;
+
+  @ApiProperty({ required: false, default: false, description: 'Initiative has food safety implications' })
+  @Prop({ default: false })
+  foodSafetyImpact?: boolean;
 
   @ApiProperty({ type: [Object] })
   @Prop({ type: [GoalSchema], default: [] })

@@ -46,14 +46,11 @@ export class AuthController {
     return this.authService.loginWithToken(body);
   }
 
-  /** Call once to create super admins if missing. No auth required. */
+  /** Creates seeded super admins only if missing; never resets existing passwords. */
   @Post('ensure-super-admin')
   async ensureSuperAdmin(): Promise<{ message: string }> {
     await this.authService.seedSuperAdmins();
-    return {
-      message:
-        'Super admins ready. superadmin@gmail.com / karaboyce — superadmin2@gmail.com / superadmin — superadmin@azib.com / azib@123',
-    };
+    return { message: 'Super admins ready.' };
   }
 
   @UseGuards(JwtAuthGuard)

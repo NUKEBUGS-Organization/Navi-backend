@@ -14,7 +14,19 @@ export type SendMailPayload = {
   html?: string;
   /** If set, used instead of RESEND_FROM_EMAIL (domain must be verified in Resend). */
   fromEmail?: string;
+  /**
+   * Person the email is from (e.g. the admin who sent it). Shown as the sender display name,
+   * "Jane Doe via NAVI", while the address stays on the verified domain.
+   */
+  fromName?: string;
+  /** Replies go here (e.g. the sending admin's email) instead of the system address. */
+  replyTo?: string;
 };
+
+/** Strip characters that would break or spoof an RFC 5322 display name. */
+function sanitizeDisplayName(name: string): string {
+  return name.replace(/["<>\r\n\\]/g, '').trim().slice(0, 100);
+}
 
 @Injectable()
 export class MailService {
@@ -65,12 +77,17 @@ export class MailService {
   async send(payload: SendMailPayload): Promise<{ messageId?: string; dryRun: boolean }> {
     const defaultFrom = this.getFromAddress();
     const fromEmail = (payload.fromEmail?.trim() || defaultFrom || '').trim() || null;
-    const fromName = (this.config.get<string>('RESEND_FROM_NAME') ?? 'NAVI').trim() || 'NAVI';
-    const from = fromEmail ? `${fromName} <${fromEmail}>` : `${fromName} <not-configured@localhost>`;
+    const systemName = (this.config.get<string>('RESEND_FROM_NAME') ?? 'NAVI').trim() || 'NAVI';
+    const sender = payload.fromName ? sanitizeDisplayName(payload.fromName) : '';
+    const fromName = sanitizeDisplayName(sender ? `${sender} via ${systemName}` : systemName);
+    const from = fromEmail
+      ? `"${fromName}" <${fromEmail}>`
+      : `"${fromName}" <not-configured@localhost>`;
+    const replyTo = payload.replyTo?.trim() || undefined;
 
     if (this.dryRun) {
       this.logger.log(
-        `[MAIL_DRY_RUN] To=${payload.to} From=${from} Subject=${payload.subject} ` +
+        `[MAIL_DRY_RUN] To=${payload.to} From=${from} ReplyTo=${replyTo ?? '-'} Subject=${payload.subject} ` +
           `(body omitted; ${payload.text ? 'text' : payload.html ? 'html' : 'empty'})`,
       );
       return { dryRun: true };
@@ -96,6 +113,7 @@ export class MailService {
         from,
         to: payload.to,
         subject: payload.subject,
+        ...(replyTo ? { replyTo } : {}),
         ...(html != null ? { html } : { text: text ?? '(no body)' }),
       });
 
