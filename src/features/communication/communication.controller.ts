@@ -47,7 +47,7 @@ export class CommunicationController {
   async send(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
     const orgId = getOrgId(user);
     if (!orgId) throw new Error('Not linked to an organization.');
-    return this.service.sendEmailNow(id, orgId);
+    return this.service.sendEmailNow(id, orgId, { name: user.name, email: user.email });
   }
 
   @Patch(':id')

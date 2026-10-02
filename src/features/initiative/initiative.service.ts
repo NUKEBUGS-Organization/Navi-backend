@@ -82,7 +82,7 @@ export class InitiativeService {
     return doc as Initiative | null;
   }
 
-  async create(dto: CreateInitiativeDto, organizationId: string): Promise<Initiative> {
+  async create(dto: CreateInitiativeDto, organizationId: string, createdById?: string): Promise<Initiative> {
     const orgId = this.toObjectId(organizationId);
     if (!orgId) throw new HttpException('Invalid organization', HttpStatus.BAD_REQUEST);
 
@@ -90,6 +90,7 @@ export class InitiativeService {
     const created = await this.initiativeModel.create({
       ...dto,
       organizationId: orgId,
+      createdById: createdById ? this.toObjectId(createdById) ?? undefined : undefined,
       status: (dto.status as Initiative['status']) ?? 'DRAFT',
       departments: dto.departments ?? [],
       goals: dto.goals ?? [],
@@ -145,6 +146,17 @@ export class InitiativeService {
     return updated as Initiative | null;
   }
 
+  /** Deletes a DRAFT initiative only (callers check for linked records first). */
+  async deleteDraft(id: string, organizationId: string): Promise<boolean> {
+    const initId = this.toObjectId(id);
+    const orgId = this.toObjectId(organizationId);
+    if (!initId || !orgId) return false;
+    const res = await this.initiativeModel
+      .deleteOne({ _id: initId, organizationId: orgId, status: 'DRAFT' })
+      .exec();
+    return res.deletedCount > 0;
+  }
+
   async updateProgress(initiativeId: string, organizationId: string, progress: number): Promise<void> {
     const initId = this.toObjectId(initiativeId);
     const orgId = this.toObjectId(organizationId);
@@ -189,7 +201,11 @@ export class InitiativeService {
       return [];
     }
 
-    const initiatives = await this.initiativeModel.find({ organizationId: orgOid }).lean().exec();
+    // Drafts are private work in progress, so they don't count as participation / RACI yet.
+    const initiatives = await this.initiativeModel
+      .find({ organizationId: orgOid, status: { $ne: 'DRAFT' } })
+      .lean()
+      .exec();
     const tasks = await this.taskModel
       .find({ organizationId: orgOid, assigneeId: userOid })
       .select('initiativeId')
@@ -257,7 +273,11 @@ export class InitiativeService {
   > {
     const orgOid = this.toObjectId(organizationId);
     if (!orgOid) return [];
-    const initiatives = await this.initiativeModel.find({ organizationId: orgOid }).lean().exec();
+    // Drafts are private work in progress, so they don't count as participation / RACI yet.
+    const initiatives = await this.initiativeModel
+      .find({ organizationId: orgOid, status: { $ne: 'DRAFT' } })
+      .lean()
+      .exec();
     type Acc = { A: Set<string>; R: Set<string>; C: Set<string>; I: Set<string> };
     const byUser: Record<string, Acc> = {};
     const ensure = (uid: string): Acc => {

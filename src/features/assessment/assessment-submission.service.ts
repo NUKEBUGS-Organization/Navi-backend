@@ -47,7 +47,8 @@ export class AssessmentSubmissionService {
       .findById(new mongoose.Types.ObjectId(assessmentId))
       .lean()
       .exec();
-    if (!assessment) {
+    // Drafts are not published yet, so they cannot be taken.
+    if (!assessment || (assessment as { status?: string }).status === 'DRAFT') {
       throw new HttpException('Assessment not found.', HttpStatus.NOT_FOUND);
     }
     const aid = assessment as { organizationId?: mongoose.Types.ObjectId; initiativeId?: mongoose.Types.ObjectId };

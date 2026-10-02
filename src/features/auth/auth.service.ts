@@ -22,7 +22,7 @@ import { hashPassword, comparePassword } from '../../utils/HashPassword';
 
 const SUPER_ADMIN_EMAIL = 'superadmin@gmail.com';
 
-/** Super admins seeded on startup; also reset on failed login for these emails. */
+/** Super admins created on startup if missing. Existing accounts are never modified. */
 const SEED_SUPER_ADMINS: { email: string; password: string; name: string }[] = [
   { email: 'superadmin@gmail.com', password: 'karaboyce', name: 'Super Admin' },
   { email: 'superadmin2@gmail.com', password: 'superadmin', name: 'Super Admin 2' },
@@ -447,15 +447,8 @@ export class AuthService {
         );
       }
       const storedHash = (user as unknown as { password?: string }).password;
-      let isValid = storedHash ? await comparePassword(loginDto.password, storedHash) : false;
-      if (!isValid && SEED_SUPER_ADMIN_EMAILS.has(email)) {
-        await this.seedSuperAdmins();
-        user = await this.userModel.findOne({ email }).select('+password');
-        if (user) {
-          const retryHash = (user as unknown as { password?: string }).password;
-          isValid = retryHash ? await comparePassword(loginDto.password, retryHash) : false;
-        }
-      }
+      // No re-seed on a wrong password: that silently reverted super admins' changed passwords.
+      const isValid = storedHash ? await comparePassword(loginDto.password, storedHash) : false;
       if (!isValid) {
         throw new HttpException(
           'Invalid email or password.',
@@ -1071,27 +1064,17 @@ export class AuthService {
     return { sent, failed };
   }
 
-  /** Ensure all seeded super admins exist with correct credentials. Creates or resets each. */
+  /**
+   * Create any seeded super admin that does not exist yet. Existing accounts are left untouched,
+   * so a password changed by its owner is never reset to the seed value.
+   */
   async seedSuperAdmins(): Promise<void> {
     for (const { email, password: plainPassword, name } of SEED_SUPER_ADMINS) {
-      const password = await hashPassword(plainPassword);
-      const existing = await this.userModel.findOne({
+      const existing = await this.userModel.exists({
         email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
       });
-      if (existing) {
-        await this.userModel.updateOne(
-          { _id: existing._id },
-          {
-            $set: {
-              email,
-              password,
-              role: UserRole.SUPER_ADMIN,
-              isActive: true,
-              name,
-            },
-          },
-        );
-      } else {
+      if (!existing) {
+        const password = await hashPassword(plainPassword);
         await this.userModel.create({
           name,
           email,
