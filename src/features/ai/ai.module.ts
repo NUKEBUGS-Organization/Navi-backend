@@ -12,6 +12,7 @@ import { AiService } from './ai.service';
 import { AiContextService } from './ai-context.service';
 import { AiCommunicationService } from './ai-communication.service';
 import { AiInitiativeHealthService } from './ai-initiative-health.service';
+import { AiRiskService } from './ai-risk.service';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { AiInitiativeHealthService } from './ai-initiative-health.service';
     ]),
   ],
   controllers: [AiController],
-  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService],
+  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService],
   exports: [AiService],
 })
 export class AiModule {}

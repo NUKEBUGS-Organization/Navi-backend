@@ -8,7 +8,9 @@ import { User, UserRole } from '../auth/user.entity';
 import { AiService } from './ai.service';
 import { AiCommunicationService } from './ai-communication.service';
 import { AiInitiativeHealthService } from './ai-initiative-health.service';
+import { AiRiskService } from './ai-risk.service';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
+import { AssessRiskDto } from './dto/assess-risk.dto';
 
 function getOrgId(user: Partial<User>): string | undefined {
   const raw = (user as { organizationId?: { toString: () => string } }).organizationId;
@@ -24,6 +26,7 @@ export class AiController {
     private readonly ai: AiService,
     private readonly communications: AiCommunicationService,
     private readonly initiativeHealth: AiInitiativeHealthService,
+    private readonly risks: AiRiskService,
   ) {}
 
   private requireOrg(user: Partial<User>): string {
@@ -50,5 +53,19 @@ export class AiController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async getInitiativeHealth(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
     return this.initiativeHealth.summarize(id, this.requireOrg(user));
+  }
+
+  @Post('initiatives/:id/risks/suggest')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async suggestRisks(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    return this.risks.suggest(id, this.requireOrg(user));
+  }
+
+  @Post('risks/assess')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async assessRisk(@Body() dto: AssessRiskDto, @CurrentUser() user: Partial<User>) {
+    return this.risks.assess(dto, this.requireOrg(user));
   }
 }
