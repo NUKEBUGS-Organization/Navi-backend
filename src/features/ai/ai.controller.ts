@@ -13,6 +13,8 @@ import { AiAssessmentService } from './ai-assessment.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import { AiStakeholderService } from './ai-stakeholder.service';
 import { AiAdoptionService } from './ai-adoption.service';
+import { AiInitiativeDraftService } from './ai-initiative-draft.service';
+import { DraftInitiativeDto } from './dto/draft-initiative.dto';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
 import { AssessRiskDto } from './dto/assess-risk.dto';
 import { AskKnowledgeDto } from './dto/ask-knowledge.dto';
@@ -36,6 +38,7 @@ export class AiController {
     private readonly knowledge: AiKnowledgeService,
     private readonly stakeholders: AiStakeholderService,
     private readonly adoption: AiAdoptionService,
+    private readonly initiativeDrafts: AiInitiativeDraftService,
   ) {}
 
   /** Every AI request: resolve the caller's organization and apply the per-user rate limit. */
@@ -57,6 +60,14 @@ export class AiController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async draftCommunication(@Body() dto: DraftCommunicationDto, @CurrentUser() user: Partial<User>) {
     return this.communications.draft(dto, this.begin(user));
+  }
+
+  @Post('initiatives/draft')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async draftInitiative(@Body() dto: DraftInitiativeDto, @CurrentUser() user: Partial<User>) {
+    this.begin(user);
+    return this.initiativeDrafts.draft(dto);
   }
 
   @Post('initiatives/:id/health')
