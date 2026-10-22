@@ -9,6 +9,7 @@ import { AiService } from './ai.service';
 import { AiCommunicationService } from './ai-communication.service';
 import { AiInitiativeHealthService } from './ai-initiative-health.service';
 import { AiRiskService } from './ai-risk.service';
+import { AiAssessmentService } from './ai-assessment.service';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
 import { AssessRiskDto } from './dto/assess-risk.dto';
 
@@ -27,6 +28,7 @@ export class AiController {
     private readonly communications: AiCommunicationService,
     private readonly initiativeHealth: AiInitiativeHealthService,
     private readonly risks: AiRiskService,
+    private readonly assessments: AiAssessmentService,
   ) {}
 
   private requireOrg(user: Partial<User>): string {
@@ -67,5 +69,12 @@ export class AiController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async assessRisk(@Body() dto: AssessRiskDto, @CurrentUser() user: Partial<User>) {
     return this.risks.assess(dto, this.requireOrg(user));
+  }
+
+  @Post('assessments/:id/insights')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async assessmentInsights(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    return this.assessments.summarize(id, this.requireOrg(user));
   }
 }

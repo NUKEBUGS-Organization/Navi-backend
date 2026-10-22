@@ -7,12 +7,16 @@ import { RiskSchema } from '../risk/risk.entity';
 import { AdoptionSchema } from '../adoption/adoption.entity';
 import { StakeholderSchema } from '../stakeholder/stakeholder.entity';
 import { CommunicationSchema } from '../communication/communication.entity';
+import { AssessmentSchema } from '../assessment/assessment.entity';
+import { AssessmentSubmissionSchema } from '../assessment/assessment-submission.entity';
+import { UserSchema } from '../auth/user.entity';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { AiContextService } from './ai-context.service';
 import { AiCommunicationService } from './ai-communication.service';
 import { AiInitiativeHealthService } from './ai-initiative-health.service';
 import { AiRiskService } from './ai-risk.service';
+import { AiAssessmentService } from './ai-assessment.service';
 
 @Module({
   imports: [
@@ -24,10 +28,13 @@ import { AiRiskService } from './ai-risk.service';
       { name: 'Adoption', schema: AdoptionSchema },
       { name: 'Stakeholder', schema: StakeholderSchema },
       { name: 'Communication', schema: CommunicationSchema },
+      { name: 'Assessment', schema: AssessmentSchema },
+      { name: 'AssessmentSubmission', schema: AssessmentSubmissionSchema },
+      { name: 'User', schema: UserSchema },
     ]),
   ],
   controllers: [AiController],
-  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService],
+  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService, AiAssessmentService],
   exports: [AiService],
 })
 export class AiModule {}
