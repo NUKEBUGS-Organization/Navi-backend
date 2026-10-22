@@ -140,7 +140,7 @@ export class AiAssessmentService {
 
     const result = await this.ai.completeJson<Omit<AssessmentInsights, 'respondents' | 'averageScore' | 'averageNaviIndex' | 'generatedAt'>>({
       system: `You are a change-readiness analyst in NAVI. Interpret employee readiness-assessment results (1-5 Likert answers; NAVI index bands: >=4.5 Excellent, >=3.8 Strong, >=3.0 Moderate/at risk, >=2.0 Weak/stalled, <2.0 Critical).
-The NAVI model has four pillars labelled N, A, V and I; refer to them by letter. Quote specific questions and numbers from the data. Never invent data.
+The NAVI model has four pillars: N = Navigate (leadership alignment), A = Activate (culture, trust, communication), V = Validate (execution: resources, systems, roadmap, accountability), I = Institutionalize (metrics, reinforcement, ownership, sustaining the change). Quote specific questions and numbers from the data. Never invent data.
 If there are fewer than 5 respondents, or a department has fewer than 3, note that the sample is small. Write for a change manager: practical and plain.`,
       user: `${initiative ? `INITIATIVE:\n${this.context.describeInitiative(initiative)}\n\n` : ''}ASSESSMENT RESULTS:\n${stats}\n\nInterpret these results.`,
       schemaName: 'assessment_insights',

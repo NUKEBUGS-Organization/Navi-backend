@@ -17,6 +17,8 @@ import { AiInitiativeDraftService } from './ai-initiative-draft.service';
 import { DraftInitiativeDto } from './dto/draft-initiative.dto';
 import { AiKudosService } from './ai-kudos.service';
 import { DraftKudosDto } from './dto/draft-kudos.dto';
+import { AiAssessmentGeneratorService } from './ai-assessment-generator.service';
+import { GenerateAssessmentDto } from './dto/generate-assessment.dto';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
 import { AssessRiskDto } from './dto/assess-risk.dto';
 import { AskKnowledgeDto } from './dto/ask-knowledge.dto';
@@ -42,6 +44,7 @@ export class AiController {
     private readonly adoption: AiAdoptionService,
     private readonly initiativeDrafts: AiInitiativeDraftService,
     private readonly kudos: AiKudosService,
+    private readonly assessmentGenerator: AiAssessmentGeneratorService,
   ) {}
 
   /** Every AI request: resolve the caller's organization and apply the per-user rate limit. */
@@ -106,6 +109,13 @@ export class AiController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async explainAdoption(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
     return this.adoption.explain(id, this.begin(user));
+  }
+
+  @Post('assessments/generate')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async generateAssessment(@Body() dto: GenerateAssessmentDto, @CurrentUser() user: Partial<User>) {
+    return this.assessmentGenerator.generate(dto, this.begin(user));
   }
 
   @Post('assessments/:id/insights')
