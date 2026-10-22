@@ -13,6 +13,18 @@ const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 const DEFAULT_RATE_LIMIT_PER_HOUR = 60;
 
+export interface ChatTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  run: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface JsonCompletionOptions {
   system: string;
   user: string;
@@ -68,6 +80,63 @@ export class AiService {
     try {
       const res = await this.client.embeddings.create({ model: this.embeddingModel, input: texts });
       return res.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
+    } catch (err) {
+      throw this.toHttpError(err);
+    }
+  }
+
+  /**
+   * Runs a conversation where the model may call read-only tools. Each round executes the requested
+   * tools and feeds results back, up to maxRounds, then returns the model's final text.
+   */
+  async chatWithTools(opts: {
+    system: string;
+    messages: ChatMessage[];
+    tools: ChatTool[];
+    maxRounds?: number;
+  }): Promise<{ reply: string; toolsUsed: string[] }> {
+    if (!this.client) throw new ServiceUnavailableException('AI features are not configured.');
+    const byName = new Map(opts.tools.map((t) => [t.name, t]));
+    const toolsUsed: string[] = [];
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      { role: 'system', content: opts.system },
+      ...opts.messages.map((m) => ({ role: m.role, content: m.content })),
+    ];
+    const toolDefs: OpenAI.Chat.Completions.ChatCompletionTool[] = opts.tools.map((t) => ({
+      type: 'function',
+      function: { name: t.name, description: t.description, parameters: t.parameters },
+    }));
+
+    try {
+      for (let round = 0; round < (opts.maxRounds ?? 5); round++) {
+        const completion = await this.client.chat.completions.create({
+          model: this.model,
+          temperature: 0.3,
+          max_completion_tokens: 1200,
+          messages,
+          tools: toolDefs,
+        });
+        const msg = completion.choices[0]?.message;
+        if (!msg) throw new BadGatewayException('The AI returned an empty response.');
+        const calls = (msg.tool_calls ?? []).filter((c) => c.type === 'function');
+        if (!calls.length) return { reply: msg.content?.trim() || "I'm not sure how to answer that.", toolsUsed };
+
+        messages.push(msg);
+        for (const call of calls) {
+          const tool = byName.get(call.function.name);
+          let output: unknown;
+          try {
+            const args = JSON.parse(call.function.arguments || '{}') as Record<string, unknown>;
+            output = tool ? await tool.run(args) : { error: `Unknown tool ${call.function.name}` };
+            if (tool) toolsUsed.push(tool.name);
+          } catch (err) {
+            // Report tool failures to the model (e.g. "Initiative not found") instead of failing the chat.
+            output = { error: err instanceof Error ? err.message : 'Tool failed' };
+          }
+          messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output).slice(0, 12_000) });
+        }
+      }
+      return { reply: 'That needed more steps than I can take in one go. Try asking a narrower question.', toolsUsed };
     } catch (err) {
       throw this.toHttpError(err);
     }

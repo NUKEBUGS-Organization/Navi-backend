@@ -19,6 +19,8 @@ import { AiKudosService } from './ai-kudos.service';
 import { DraftKudosDto } from './dto/draft-kudos.dto';
 import { AiAssessmentGeneratorService } from './ai-assessment-generator.service';
 import { GenerateAssessmentDto } from './dto/generate-assessment.dto';
+import { AiChatService } from './ai-chat.service';
+import { ChatDto } from './dto/chat.dto';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
 import { AssessRiskDto } from './dto/assess-risk.dto';
 import { AskKnowledgeDto } from './dto/ask-knowledge.dto';
@@ -45,6 +47,7 @@ export class AiController {
     private readonly initiativeDrafts: AiInitiativeDraftService,
     private readonly kudos: AiKudosService,
     private readonly assessmentGenerator: AiAssessmentGeneratorService,
+    private readonly chatService: AiChatService,
   ) {}
 
   /** Every AI request: resolve the caller's organization and apply the per-user rate limit. */
@@ -59,6 +62,14 @@ export class AiController {
   @Get('status')
   status() {
     return { enabled: this.ai.isEnabled };
+  }
+
+  /** "Navi AI" assistant: answers questions using read-only, org-scoped tools. */
+  @Post('chat')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async chat(@Body() dto: ChatDto, @CurrentUser() user: Partial<User>) {
+    return this.chatService.chat(dto.messages, user, this.begin(user), dto.currentInitiativeId);
   }
 
   @Post('communications/draft')
