@@ -20,6 +20,7 @@ import { AiInitiativeHealthService } from './ai-initiative-health.service';
 import { AiRiskService } from './ai-risk.service';
 import { AiAssessmentService } from './ai-assessment.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
+import { AiStakeholderService } from './ai-stakeholder.service';
 
 @Module({
   imports: [
@@ -39,7 +40,7 @@ import { AiKnowledgeService } from './ai-knowledge.service';
     ]),
   ],
   controllers: [AiController],
-  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService, AiAssessmentService, AiKnowledgeService],
+  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService, AiAssessmentService, AiKnowledgeService, AiStakeholderService],
   exports: [AiService],
 })
 export class AiModule {}

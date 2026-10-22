@@ -11,6 +11,7 @@ import { AiInitiativeHealthService } from './ai-initiative-health.service';
 import { AiRiskService } from './ai-risk.service';
 import { AiAssessmentService } from './ai-assessment.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
+import { AiStakeholderService } from './ai-stakeholder.service';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
 import { AssessRiskDto } from './dto/assess-risk.dto';
 import { AskKnowledgeDto } from './dto/ask-knowledge.dto';
@@ -32,6 +33,7 @@ export class AiController {
     private readonly risks: AiRiskService,
     private readonly assessments: AiAssessmentService,
     private readonly knowledge: AiKnowledgeService,
+    private readonly stakeholders: AiStakeholderService,
   ) {}
 
   /** Every AI request: resolve the caller's organization and apply the per-user rate limit. */
@@ -74,6 +76,13 @@ export class AiController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async assessRisk(@Body() dto: AssessRiskDto, @CurrentUser() user: Partial<User>) {
     return this.risks.assess(dto, this.begin(user));
+  }
+
+  @Post('initiatives/:id/stakeholders/analyze')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async analyzeStakeholders(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    return this.stakeholders.analyze(id, this.begin(user));
   }
 
   @Post('assessments/:id/insights')
