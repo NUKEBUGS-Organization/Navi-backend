@@ -26,6 +26,7 @@ import { AiAdoptionService } from './ai-adoption.service';
 import { AiInitiativeDraftService } from './ai-initiative-draft.service';
 import { AiKudosService } from './ai-kudos.service';
 import { AiAssessmentGeneratorService } from './ai-assessment-generator.service';
+import { AiChatService } from './ai-chat.service';
 
 @Module({
   imports: [
@@ -46,7 +47,7 @@ import { AiAssessmentGeneratorService } from './ai-assessment-generator.service'
     ]),
   ],
   controllers: [AiController],
-  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService, AiAssessmentService, AiKnowledgeService, AiStakeholderService, AiAdoptionService, AiInitiativeDraftService, AiKudosService, AiAssessmentGeneratorService],
+  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService, AiAssessmentService, AiKnowledgeService, AiStakeholderService, AiAdoptionService, AiInitiativeDraftService, AiKudosService, AiAssessmentGeneratorService, AiChatService],
   exports: [AiService],
 })
 export class AiModule {}
