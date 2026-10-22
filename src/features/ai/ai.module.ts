@@ -11,6 +11,7 @@ import { AssessmentSchema } from '../assessment/assessment.entity';
 import { AssessmentSubmissionSchema } from '../assessment/assessment-submission.entity';
 import { UserSchema } from '../auth/user.entity';
 import { KnowledgeEntrySchema } from '../knowledge-hub/knowledge-entry.entity';
+import { KudosContributionSchema } from '../kudos/kudos.entity';
 import { AiEmbeddingSchema } from './ai-embedding.entity';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
@@ -23,6 +24,7 @@ import { AiKnowledgeService } from './ai-knowledge.service';
 import { AiStakeholderService } from './ai-stakeholder.service';
 import { AiAdoptionService } from './ai-adoption.service';
 import { AiInitiativeDraftService } from './ai-initiative-draft.service';
+import { AiKudosService } from './ai-kudos.service';
 
 @Module({
   imports: [
@@ -39,10 +41,11 @@ import { AiInitiativeDraftService } from './ai-initiative-draft.service';
       { name: 'User', schema: UserSchema },
       { name: 'KnowledgeEntry', schema: KnowledgeEntrySchema },
       { name: 'AiEmbedding', schema: AiEmbeddingSchema },
+      { name: 'KudosContribution', schema: KudosContributionSchema },
     ]),
   ],
   controllers: [AiController],
-  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService, AiAssessmentService, AiKnowledgeService, AiStakeholderService, AiAdoptionService, AiInitiativeDraftService],
+  providers: [AiService, AiContextService, AiCommunicationService, AiInitiativeHealthService, AiRiskService, AiAssessmentService, AiKnowledgeService, AiStakeholderService, AiAdoptionService, AiInitiativeDraftService, AiKudosService],
   exports: [AiService],
 })
 export class AiModule {}

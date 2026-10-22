@@ -15,6 +15,8 @@ import { AiStakeholderService } from './ai-stakeholder.service';
 import { AiAdoptionService } from './ai-adoption.service';
 import { AiInitiativeDraftService } from './ai-initiative-draft.service';
 import { DraftInitiativeDto } from './dto/draft-initiative.dto';
+import { AiKudosService } from './ai-kudos.service';
+import { DraftKudosDto } from './dto/draft-kudos.dto';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
 import { AssessRiskDto } from './dto/assess-risk.dto';
 import { AskKnowledgeDto } from './dto/ask-knowledge.dto';
@@ -39,6 +41,7 @@ export class AiController {
     private readonly stakeholders: AiStakeholderService,
     private readonly adoption: AiAdoptionService,
     private readonly initiativeDrafts: AiInitiativeDraftService,
+    private readonly kudos: AiKudosService,
   ) {}
 
   /** Every AI request: resolve the caller's organization and apply the per-user rate limit. */
@@ -110,6 +113,13 @@ export class AiController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async assessmentInsights(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
     return this.assessments.summarize(id, this.begin(user));
+  }
+
+  @Post('kudos/draft')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async draftKudos(@Body() dto: DraftKudosDto, @CurrentUser() user: Partial<User>) {
+    return this.kudos.draft(dto, user, this.begin(user));
   }
 
   /** Semantic search over an initiative's Knowledge Hub (same audience as the hub itself). */
