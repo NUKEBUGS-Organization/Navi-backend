@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -7,6 +7,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User, UserRole } from '../auth/user.entity';
 import { AiService } from './ai.service';
 import { AiCommunicationService } from './ai-communication.service';
+import { AiInitiativeHealthService } from './ai-initiative-health.service';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
 
 function getOrgId(user: Partial<User>): string | undefined {
@@ -22,7 +23,14 @@ export class AiController {
   constructor(
     private readonly ai: AiService,
     private readonly communications: AiCommunicationService,
+    private readonly initiativeHealth: AiInitiativeHealthService,
   ) {}
+
+  private requireOrg(user: Partial<User>): string {
+    const orgId = getOrgId(user);
+    if (!orgId) throw new BadRequestException('Not linked to an organization.');
+    return orgId;
+  }
 
   /** Lets the frontend hide AI buttons when no key is configured. */
   @Get('status')
@@ -34,8 +42,13 @@ export class AiController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async draftCommunication(@Body() dto: DraftCommunicationDto, @CurrentUser() user: Partial<User>) {
-    const orgId = getOrgId(user);
-    if (!orgId) throw new BadRequestException('Not linked to an organization.');
-    return this.communications.draft(dto, orgId);
+    return this.communications.draft(dto, this.requireOrg(user));
+  }
+
+  @Post('initiatives/:id/health')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async getInitiativeHealth(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    return this.initiativeHealth.summarize(id, this.requireOrg(user));
   }
 }

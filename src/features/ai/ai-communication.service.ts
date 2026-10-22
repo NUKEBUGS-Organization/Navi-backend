@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InitiativeService } from '../initiative/initiative.service';
+import { Injectable } from '@nestjs/common';
 import { AiService } from './ai.service';
+import { AiContextService } from './ai-context.service';
 import { DraftCommunicationDto } from './dto/draft-communication.dto';
 
 export interface CommunicationDraft {
@@ -33,35 +33,12 @@ Output plain text (no markdown headings or asterisks) in the message body. Do no
 export class AiCommunicationService {
   constructor(
     private readonly ai: AiService,
-    private readonly initiatives: InitiativeService,
+    private readonly context: AiContextService,
   ) {}
 
   async draft(dto: DraftCommunicationDto, organizationId: string): Promise<CommunicationDraft> {
-    const initiative = await this.initiatives.findOne(dto.initiativeId, organizationId);
-    if (!initiative) throw new NotFoundException('Initiative not found.');
-
-    const goals = (initiative.goals ?? [])
-      .filter((g) => g.goal)
-      .map((g) => `- ${g.goal}${g.metric ? ` (measured by: ${g.metric})` : ''}`)
-      .join('\n');
-    const faqs = (initiative.faqs ?? [])
-      .filter((f) => f.question && f.answer)
-      .map((f) => `Q: ${f.question}\nA: ${f.answer}`)
-      .join('\n');
-
-    const context = [
-      `Initiative: ${initiative.title}`,
-      initiative.description && `Description: ${initiative.description}`,
-      initiative.changeType && `Change type: ${initiative.changeType}`,
-      initiative.leadName && `Change lead: ${initiative.leadName}`,
-      initiative.sponsorName && `Sponsor: ${initiative.sponsorName}`,
-      initiative.dateRange && `Timeline: ${initiative.dateRange}`,
-      initiative.departments?.length && `Departments affected: ${initiative.departments.join(', ')}`,
-      goals && `Goals:\n${goals}`,
-      faqs && `FAQs:\n${faqs}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    const initiative = await this.context.getInitiative(dto.initiativeId, organizationId);
+    const context = this.context.describeInitiative(initiative);
 
     const request = [
       `Communication type: ${dto.type ?? 'Email'}`,
