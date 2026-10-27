@@ -6,6 +6,8 @@ import { Assessment } from './assessment.entity';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { SaveAssessmentDraftDto } from './dto/save-assessment-draft.dto';
 import { UserRole } from '../auth/user.entity';
+import { InitiativeService } from '../initiative/initiative.service';
+import { NOT_ARCHIVED, ONLY_ARCHIVED, notInArchivedInitiatives } from '../../utils/archive';
 
 /** Excludes drafts. Legacy records have no `status`, so `$ne` (not `status: 'PUBLISHED'`). */
 const NOT_DRAFT = { status: { $ne: 'DRAFT' } } as const;
@@ -82,6 +84,9 @@ function canUserSeeAudience(
 export class AssessmentService {
   constructor(
     @InjectModel('Assessment') private readonly assessmentModel: Model<Assessment>,
+    @InjectModel('AssessmentSubmission') private readonly submissionModel: Model<unknown>,
+    @InjectModel('KudosContribution') private readonly kudosModel: Model<unknown>,
+    private readonly initiativeService: InitiativeService,
   ) {}
 
   async create(
@@ -185,7 +190,7 @@ export class AssessmentService {
     const oid = new mongoose.Types.ObjectId(initiativeId);
     const orgOid = new mongoose.Types.ObjectId(organizationId);
     const list = await this.assessmentModel
-      .find({ initiativeId: oid, organizationId: orgOid, ...NOT_DRAFT })
+      .find({ initiativeId: oid, organizationId: orgOid, ...NOT_DRAFT, ...NOT_ARCHIVED })
       .sort({ createdAt: -1 })
       .lean()
       .exec();
@@ -195,7 +200,7 @@ export class AssessmentService {
   async findByInitiativeId(initiativeId: string, userRole?: string): Promise<Assessment | null> {
     const oid = new mongoose.Types.ObjectId(initiativeId);
     const doc = await this.assessmentModel
-      .findOne({ initiativeId: oid, ...NOT_DRAFT })
+      .findOne({ initiativeId: oid, ...NOT_DRAFT, ...NOT_ARCHIVED })
       .sort({ createdAt: -1 })
       .lean()
       .exec();
@@ -205,11 +210,16 @@ export class AssessmentService {
     return assessment;
   }
 
-  async findById(id: string, organizationId: string): Promise<Assessment | null> {
-    const oid = new mongoose.Types.ObjectId(id);
+  async findById(
+    id: string,
+    organizationId: string,
+    opts: { includeArchived?: boolean } = {},
+  ): Promise<Assessment | null> {
+    const oid = toObjectIdOrUndefined(id);
+    if (!oid) return null;
     const orgOid = new mongoose.Types.ObjectId(organizationId);
     const doc = await this.assessmentModel
-      .findOne({ _id: oid, organizationId: orgOid, ...NOT_DRAFT })
+      .findOne({ _id: oid, organizationId: orgOid, ...NOT_DRAFT, ...(opts.includeArchived ? {} : NOT_ARCHIVED) })
       .lean()
       .exec();
     return doc as Assessment | null;
@@ -226,14 +236,21 @@ export class AssessmentService {
     return found;
   }
 
-  async findAllByOrganization(organizationId: string, userRole?: string): Promise<Assessment[]> {
+  /** Published, non-archived assessments the role can see; `ignoreAudience` lists all (admin management view). */
+  async findAllByOrganization(
+    organizationId: string,
+    userRole?: string,
+    opts: { ignoreAudience?: boolean } = {},
+  ): Promise<Assessment[]> {
     const oid = new mongoose.Types.ObjectId(organizationId);
+    const archivedInitiativeIds = await this.initiativeService.findArchivedIds(organizationId);
     const list = await this.assessmentModel
-      .find({ organizationId: oid, ...NOT_DRAFT })
+      .find({ organizationId: oid, ...NOT_DRAFT, ...NOT_ARCHIVED, ...notInArchivedInitiatives(archivedInitiativeIds) })
       .sort({ createdAt: -1 })
       .lean()
       .exec();
     const assessments = list as Assessment[];
+    if (opts.ignoreAudience) return assessments;
     if (!userRole) return [];
     return assessments.filter((a) => canUserSeeAudience(a.audience, userRole));
   }
@@ -248,7 +265,8 @@ export class AssessmentService {
       _id: mongoose.Types.ObjectId;
       organizationId?: mongoose.Types.ObjectId;
       status: { $ne: 'DRAFT' };
-    } = { _id: oid, ...NOT_DRAFT };
+      archivedAt: null;
+    } = { _id: oid, ...NOT_DRAFT, ...NOT_ARCHIVED };
     if (organizationId) {
       filter.organizationId = new mongoose.Types.ObjectId(organizationId);
     }
@@ -257,5 +275,77 @@ export class AssessmentService {
       .lean()
       .exec();
     return doc as Assessment | null;
+  }
+
+  // ---- Archive (soft delete) and permanent delete; admin only ----
+
+  async listArchived(organizationId: string): Promise<Assessment[]> {
+    const list = await this.assessmentModel
+      .find({ organizationId: new mongoose.Types.ObjectId(organizationId), ...NOT_DRAFT, ...ONLY_ARCHIVED })
+      .sort({ archivedAt: -1 })
+      .lean()
+      .exec();
+    return list as Assessment[];
+  }
+
+  async archive(id: string, organizationId: string, archivedById?: string): Promise<Assessment | null> {
+    const oid = toObjectIdOrUndefined(id);
+    if (!oid) return null;
+    const doc = await this.assessmentModel
+      .findOneAndUpdate(
+        { _id: oid, organizationId: new mongoose.Types.ObjectId(organizationId), ...NOT_DRAFT },
+        { $set: { archivedAt: new Date(), archivedById: toObjectIdOrUndefined(archivedById) } },
+        { new: true },
+      )
+      .lean()
+      .exec();
+    return doc as Assessment | null;
+  }
+
+  async restore(id: string, organizationId: string): Promise<Assessment | null> {
+    const oid = toObjectIdOrUndefined(id);
+    if (!oid) return null;
+    const doc = await this.assessmentModel
+      .findOneAndUpdate(
+        { _id: oid, organizationId: new mongoose.Types.ObjectId(organizationId), ...NOT_DRAFT },
+        { $set: { archivedAt: null }, $unset: { archivedById: 1 } },
+        { new: true },
+      )
+      .lean()
+      .exec();
+    return doc as Assessment | null;
+  }
+
+  /**
+   * Permanently deletes an archived assessment with its submissions and the system kudos those
+   * submissions earned. Only archived assessments can be deleted, so a delete is always a second step.
+   */
+  async deletePermanently(id: string, organizationId: string): Promise<{ deleted: boolean }> {
+    const oid = toObjectIdOrUndefined(id);
+    if (!oid) return { deleted: false };
+    const orgOid = new mongoose.Types.ObjectId(organizationId);
+    const existing = await this.assessmentModel
+      .findOne({ _id: oid, organizationId: orgOid, ...ONLY_ARCHIVED })
+      .select('_id')
+      .lean()
+      .exec();
+    if (!existing) {
+      throw new HttpException('Archive the assessment before deleting it permanently.', HttpStatus.BAD_REQUEST);
+    }
+    const submissionIds = (
+      (await this.submissionModel
+        .find({ organizationId: orgOid, assessmentId: oid })
+        .select('_id')
+        .lean()
+        .exec()) as Array<{ _id: mongoose.Types.ObjectId }>
+    ).map((s) => s._id);
+    if (submissionIds.length) {
+      await this.kudosModel
+        .deleteMany({ organizationId: orgOid, assessmentSubmissionId: { $in: submissionIds } })
+        .exec();
+      await this.submissionModel.deleteMany({ organizationId: orgOid, assessmentId: oid }).exec();
+    }
+    const res = await this.assessmentModel.deleteOne({ _id: oid, organizationId: orgOid }).exec();
+    return { deleted: res.deletedCount > 0 };
   }
 }

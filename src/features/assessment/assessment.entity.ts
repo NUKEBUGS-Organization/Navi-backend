@@ -80,6 +80,15 @@ export class Assessment {
   @Prop({ default: '' })
   riskLevel?: string;
 
+  /** Set when an admin archives the assessment (soft delete). See utils/archive.ts. */
+  @ApiProperty({ required: false, type: Date, nullable: true })
+  @Prop({ type: Date, default: null, index: true })
+  archivedAt?: Date | null;
+
+  @ApiProperty({ required: false })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, required: false })
+  archivedById?: mongoose.Types.ObjectId;
+
   @ApiProperty()
   createdAt: Date;
 

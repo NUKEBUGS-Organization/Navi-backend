@@ -7,6 +7,12 @@ import { CreateRiskDto } from './dto/create-risk.dto';
 import { UpdateRiskDto } from './dto/update-risk.dto';
 import { InitiativeService } from '../initiative/initiative.service';
 import { AssessmentSubmission } from '../assessment/assessment-submission.entity';
+import {
+  findArchivedAssessmentIds,
+  notInArchivedAssessments,
+  notInArchivedInitiatives,
+} from '../../utils/archive';
+import { Assessment } from '../assessment/assessment.entity';
 
 /** Risk level from assessment avg score: >=4 Low, 2.5-4 Medium, <2.5 High */
 export interface AssessmentDerivedRiskDto {
@@ -24,6 +30,7 @@ export class RiskService {
   constructor(
     @InjectModel('Risk') private readonly model: Model<Risk>,
     @InjectModel('AssessmentSubmission') private readonly submissionModel: Model<AssessmentSubmission>,
+    @InjectModel('Assessment') private readonly assessmentModel: Model<Assessment>,
     private readonly initiativeService: InitiativeService,
   ) {}
 
@@ -57,8 +64,10 @@ export class RiskService {
   }
 
   async findByOrganization(organizationId: string, statusFilter?: string, severityFilter?: string): Promise<Risk[]> {
-    const filter: { organizationId: mongoose.Types.ObjectId; status?: string; severity?: string } = {
+    const archivedIds = await this.initiativeService.findArchivedIds(organizationId);
+    const filter: Record<string, unknown> = {
       organizationId: new mongoose.Types.ObjectId(organizationId),
+      ...notInArchivedInitiatives(archivedIds),
     };
     if (statusFilter) filter.status = statusFilter;
     if (severityFilter) filter.severity = severityFilter;
@@ -99,8 +108,13 @@ export class RiskService {
   /** Initiatives with medium/high risk from assessment submissions (avg score < 4). */
   async getAssessmentDerivedRisks(organizationId: string): Promise<AssessmentDerivedRiskDto[]> {
     const orgId = new mongoose.Types.ObjectId(organizationId);
+    const archivedIds = await this.initiativeService.findArchivedIds(organizationId);
     const subs = await this.submissionModel
-      .find({ organizationId: orgId })
+      .find({
+        organizationId: orgId,
+        ...notInArchivedInitiatives(archivedIds),
+        ...notInArchivedAssessments(await findArchivedAssessmentIds(this.assessmentModel, orgId)),
+      })
       .lean()
       .exec();
     if (subs.length === 0) return [];
@@ -140,15 +154,17 @@ export class RiskService {
   ): Promise<{ high: number; medium: number; low: number; open: number }> {
     // Map `Critical` into `High` for the dashboard cards.
     const orgOid = new mongoose.Types.ObjectId(organizationId);
+    const live = notInArchivedInitiatives(await this.initiativeService.findArchivedIds(organizationId));
     const [high, medium, low, open] = await Promise.all([
       this.model
-        .countDocuments({ organizationId: orgOid, severity: { $in: ['High', 'Critical'] } })
+        .countDocuments({ organizationId: orgOid, ...live, severity: { $in: ['High', 'Critical'] } })
         .exec(),
-      this.model.countDocuments({ organizationId: orgOid, severity: 'Medium' }).exec(),
-      this.model.countDocuments({ organizationId: orgOid, severity: 'Low' }).exec(),
+      this.model.countDocuments({ organizationId: orgOid, ...live, severity: 'Medium' }).exec(),
+      this.model.countDocuments({ organizationId: orgOid, ...live, severity: 'Low' }).exec(),
       this.model
         .countDocuments({
           organizationId: orgOid,
+          ...live,
           status: { $in: ['Open', 'Mitigating'] },
         })
         .exec(),

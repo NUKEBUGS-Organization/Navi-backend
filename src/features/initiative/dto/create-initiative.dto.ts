@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsIn,
+  IsMongoId,
   Max,
   Min,
   ValidateNested,
@@ -51,10 +52,17 @@ export class CreateInitiativeDto {
   @IsString()
   status?: string;
 
+  /** Display name of the change lead. When `leadUserId` is set, the server replaces this with the user's current name. */
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
   leadName: string;
+
+  /** User ID of the change lead. Lead names are resolved from this user record at read time. */
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsMongoId()
+  leadUserId?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

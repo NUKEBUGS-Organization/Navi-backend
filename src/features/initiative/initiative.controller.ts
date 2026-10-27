@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -52,16 +53,24 @@ export class InitiativeController {
    * person who started the draft can see them. Older drafts without a creator stay admin-only.
    */
   private canSeeInitiative(initiative: Initiative, user: Partial<User>): boolean {
-    if ((initiative as { status?: string }).status !== 'DRAFT') return true;
     if ((user as { role?: UserRole }).role === UserRole.ADMIN) return true;
+    // Archived initiatives are only visible to admins (who can restore or delete them).
+    if ((initiative as { archivedAt?: Date | null }).archivedAt) return false;
+    if ((initiative as { status?: string }).status !== 'DRAFT') return true;
     const creator = (initiative as { createdById?: { toString: () => string } }).createdById?.toString?.();
     const me = (user as { _id?: { toString: () => string } })._id?.toString?.();
     return Boolean(creator && me && creator === me);
   }
 
   @Get()
-  async list(@CurrentUser() user: Partial<User>) {
+  async list(@CurrentUser() user: Partial<User>, @Query('archived') archived?: string) {
     const orgId = this.getOrgId(user);
+    if (archived === 'true') {
+      if ((user as { role?: UserRole }).role !== UserRole.ADMIN) {
+        throw new HttpException('Only admins can view archived initiatives.', HttpStatus.FORBIDDEN);
+      }
+      return this.initiativeService.findAllByOrganization(orgId, { archived: true });
+    }
     await this.taskService.refreshOrganizationInitiativeProgress(orgId);
     const all = await this.initiativeService.findAllByOrganization(orgId);
     return all.filter((i) => this.canSeeInitiative(i, user));
@@ -119,12 +128,12 @@ export class InitiativeController {
     if (!existing || !this.canSeeInitiative(existing, user)) {
       throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);
     }
+    if ((existing as { archivedAt?: Date | null }).archivedAt) {
+      throw new HttpException('This initiative is archived. Restore it before editing.', HttpStatus.BAD_REQUEST);
+    }
 
     if (dto.adoptionTrackingEnabled !== undefined) {
-      const leadMatch =
-        String((existing as { leadName?: string }).leadName ?? '')
-          .trim()
-          .toLowerCase() === String(user.name ?? '').trim().toLowerCase();
+      const leadMatch = this.initiativeService.isLead(existing, user);
       const canSet =
         role === UserRole.ADMIN || (role === UserRole.MANAGER && leadMatch);
       if (!canSet) {
@@ -183,6 +192,41 @@ export class InitiativeController {
       );
     }
     await this.initiativeService.deleteDraft(id, orgId);
+    return { deleted: true };
+  }
+
+  /** Soft delete: hides the initiative and its records from lists, dashboards and rollups. */
+  @Post(':id/archive')
+  @Roles(UserRole.ADMIN)
+  async archive(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    const orgId = this.getOrgId(user);
+    const userId = (user as { _id?: { toString: () => string } })._id?.toString?.();
+    const archived = await this.initiativeService.archive(id, orgId, userId);
+    if (!archived) throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);
+    return archived;
+  }
+
+  @Post(':id/restore')
+  @Roles(UserRole.ADMIN)
+  async restore(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    const orgId = this.getOrgId(user);
+    const restored = await this.initiativeService.restore(id, orgId);
+    if (!restored) throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);
+    await this.taskService.refreshInitiativeProgress(id, orgId);
+    return restored;
+  }
+
+  /** Permanent delete. The initiative must be archived first; this cannot be undone. */
+  @Delete(':id')
+  @Roles(UserRole.ADMIN)
+  async deletePermanently(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    const orgId = this.getOrgId(user);
+    const existing = await this.initiativeService.findOne(id, orgId);
+    if (!existing) throw new HttpException('Initiative not found.', HttpStatus.NOT_FOUND);
+    if (!(existing as { archivedAt?: Date | null }).archivedAt) {
+      throw new HttpException('Archive the initiative before deleting it permanently.', HttpStatus.BAD_REQUEST);
+    }
+    await this.initiativeService.deletePermanently(id, orgId);
     return { deleted: true };
   }
 }

@@ -9,6 +9,7 @@ import { InitiativeService } from '../initiative/initiative.service';
 import { computeInitiativeProgressPercent } from '../initiative/initiative-progress.util';
 import { Task } from '../task/task.entity';
 import { UserRole } from '../auth/user.entity';
+import { notInArchivedInitiatives } from '../../utils/archive';
 
 @Injectable()
 export class AdoptionService {
@@ -77,8 +78,9 @@ export class AdoptionService {
   }
 
   async findByOrganization(organizationId: string): Promise<Adoption[]> {
+    const archivedIds = await this.initiativeService.findArchivedIds(organizationId);
     const list = await this.model
-      .find({ organizationId: new mongoose.Types.ObjectId(organizationId) })
+      .find({ organizationId: new mongoose.Types.ObjectId(organizationId), ...notInArchivedInitiatives(archivedIds) })
       .sort({ targetDate: 1, createdAt: -1 })
       .lean()
       .exec();

@@ -120,6 +120,45 @@ export class AssessmentController {
     return this.assessmentService.deleteDraft(id, orgIdOf(user));
   }
 
+  // ---- Archive (soft delete) / restore / permanent delete; admin only ----
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Get('archived')
+  listArchived(@CurrentUser() user: Partial<User>) {
+    return this.assessmentService.listArchived(orgIdOf(user));
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Post(':id/archive')
+  async archive(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    const archived = await this.assessmentService.archive(id, orgIdOf(user), userIdOf(user));
+    if (!archived) throw new HttpException('Assessment not found.', HttpStatus.NOT_FOUND);
+    return archived;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Post(':id/restore')
+  async restore(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    const restored = await this.assessmentService.restore(id, orgIdOf(user));
+    if (!restored) throw new HttpException('Assessment not found.', HttpStatus.NOT_FOUND);
+    return restored;
+  }
+
+  /** Permanent delete. The assessment must be archived first; this cannot be undone. */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Delete(':id')
+  deletePermanently(@Param('id') id: string, @CurrentUser() user: Partial<User>) {
+    return this.assessmentService.deletePermanently(id, orgIdOf(user));
+  }
+
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('templates')
@@ -133,6 +172,7 @@ export class AssessmentController {
   async listOrGetByInitiative(
     @Query('initiativeId') initiativeId: string,
     @CurrentUser() user: Partial<User>,
+    @Query('all') all?: string,
   ) {
     const orgId = (user as { organizationId?: { toString: () => string } })
       .organizationId?.toString?.() ?? (user as { organizationId?: string }).organizationId;
@@ -143,7 +183,9 @@ export class AssessmentController {
       return this.assessmentService.findAllByInitiativeId(initiativeId, orgId);
     }
     const userRole = (user as { role?: string }).role;
-    return this.assessmentService.findAllByOrganization(orgId, userRole);
+    // Admins can list every assessment regardless of audience, for the management view.
+    const ignoreAudience = all === 'true' && userRole === UserRole.ADMIN;
+    return this.assessmentService.findAllByOrganization(orgId, userRole, { ignoreAudience });
   }
 
   @UseGuards(JwtAuthGuard)
@@ -158,7 +200,8 @@ export class AssessmentController {
     if (!orgId) {
       throw new HttpException('Not linked to an organization.', HttpStatus.FORBIDDEN);
     }
-    const assessment = await this.assessmentService.findById(id, orgId);
+    const isAdmin = (user as { role?: string }).role === UserRole.ADMIN;
+    const assessment = await this.assessmentService.findById(id, orgId, { includeArchived: isAdmin });
     if (!assessment) {
       throw new HttpException('Assessment not found.', HttpStatus.NOT_FOUND);
     }

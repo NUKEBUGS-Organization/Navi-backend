@@ -9,6 +9,7 @@ import { InitiativeService } from '../initiative/initiative.service';
 import { computeInitiativeProgressPercent } from '../initiative/initiative-progress.util';
 import { Adoption } from '../adoption/adoption.entity';
 import { KudosService } from '../kudos/kudos.service';
+import { notInArchivedInitiatives } from '../../utils/archive';
 
 function statusFromProgress(progress: number): Task['status'] {
   if (progress >= 100) return 'Completed';
@@ -107,8 +108,9 @@ export class TaskService {
 
   async findByOrganization(organizationId: string): Promise<Task[]> {
     const orgId = new mongoose.Types.ObjectId(organizationId);
+    const archivedIds = await this.initiativeService.findArchivedIds(organizationId);
     const list = await this.taskModel
-      .find({ organizationId: orgId })
+      .find({ organizationId: orgId, ...notInArchivedInitiatives(archivedIds) })
       .sort({ createdAt: -1 })
       .populate('assigneeId', 'name')
       .lean()

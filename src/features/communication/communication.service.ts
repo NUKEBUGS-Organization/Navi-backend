@@ -8,6 +8,7 @@ import { UpdateCommunicationDto } from './dto/update-communication.dto';
 import { InitiativeService } from '../initiative/initiative.service';
 import { User, UserRole } from '../auth/user.entity';
 import { MailService } from '../mail/mail.service';
+import { notInArchivedInitiatives } from '../../utils/archive';
 
 @Injectable()
 export class CommunicationService {
@@ -51,8 +52,9 @@ export class CommunicationService {
   }
 
   async findByOrganization(organizationId: string): Promise<Communication[]> {
+    const archivedIds = await this.initiativeService.findArchivedIds(organizationId);
     const list = await this.model
-      .find({ organizationId: new mongoose.Types.ObjectId(organizationId) })
+      .find({ organizationId: new mongoose.Types.ObjectId(organizationId), ...notInArchivedInitiatives(archivedIds) })
       .sort({ scheduledDate: 1, createdAt: -1 })
       .lean()
       .exec();

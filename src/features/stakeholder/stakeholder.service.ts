@@ -6,6 +6,7 @@ import { Stakeholder } from './stakeholder.entity';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { InitiativeService } from '../initiative/initiative.service';
+import { notInArchivedInitiatives } from '../../utils/archive';
 
 @Injectable()
 export class StakeholderService {
@@ -44,8 +45,9 @@ export class StakeholderService {
   }
 
   async findByOrganization(organizationId: string): Promise<Stakeholder[]> {
+    const archivedIds = await this.initiativeService.findArchivedIds(organizationId);
     const list = await this.model
-      .find({ organizationId: new mongoose.Types.ObjectId(organizationId) })
+      .find({ organizationId: new mongoose.Types.ObjectId(organizationId), ...notInArchivedInitiatives(archivedIds) })
       .sort({ createdAt: -1 })
       .lean()
       .exec();

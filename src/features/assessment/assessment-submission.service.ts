@@ -8,6 +8,11 @@ import { InitiativeService } from '../initiative/initiative.service';
 import { KudosService } from '../kudos/kudos.service';
 import { User } from '../auth/user.entity';
 import { computeNaviFromAnswers } from '../../utils/navi-score';
+import {
+  findArchivedAssessmentIds,
+  notInArchivedAssessments,
+  notInArchivedInitiatives,
+} from '../../utils/archive';
 
 @Injectable()
 export class AssessmentSubmissionService {
@@ -47,8 +52,12 @@ export class AssessmentSubmissionService {
       .findById(new mongoose.Types.ObjectId(assessmentId))
       .lean()
       .exec();
-    // Drafts are not published yet, so they cannot be taken.
-    if (!assessment || (assessment as { status?: string }).status === 'DRAFT') {
+    // Drafts are not published yet, and archived assessments are retired, so neither can be taken.
+    if (
+      !assessment ||
+      (assessment as { status?: string }).status === 'DRAFT' ||
+      (assessment as { archivedAt?: Date | null }).archivedAt
+    ) {
       throw new HttpException('Assessment not found.', HttpStatus.NOT_FOUND);
     }
     const aid = assessment as { organizationId?: mongoose.Types.ObjectId; initiativeId?: mongoose.Types.ObjectId };
@@ -58,6 +67,9 @@ export class AssessmentSubmissionService {
       throw new HttpException('Assessment does not belong to your organization.', HttpStatus.FORBIDDEN);
     }
     const initiative = await this.initiativeService.findOne(initId, organizationId);
+    if (initiative?.archivedAt) {
+      throw new HttpException('This initiative is archived, so its assessments are closed.', HttpStatus.FORBIDDEN);
+    }
     if (!initiative || initiative.status === 'DRAFT') {
       throw new HttpException(
         'Cannot submit assessments for an initiative in Draft. An admin must set the initiative to Active first.',
@@ -216,16 +228,33 @@ export class AssessmentSubmissionService {
     return this.enrichWithAssessmentNames(list);
   }
 
-  async findByInitiativeId(initiativeId: string): Promise<(AssessmentSubmission & { assessmentName?: string })[]> {
-    const list = await this.findSubmissionsByQuery({ initiativeId: new mongoose.Types.ObjectId(initiativeId) });
+  async findByInitiativeId(
+    initiativeId: string,
+    organizationId: string,
+  ): Promise<(AssessmentSubmission & { assessmentName?: string })[]> {
+    const list = await this.findSubmissionsByQuery({
+      organizationId: new mongoose.Types.ObjectId(organizationId),
+      initiativeId: new mongoose.Types.ObjectId(initiativeId),
+    });
     return this.enrichWithAssessmentNames(list);
   }
 
+  /** Leaves out submissions to archived assessments and (for org-wide queries) archived initiatives. */
   private async findSubmissionsByQuery(
     query: { organizationId?: mongoose.Types.ObjectId; userId?: mongoose.Types.ObjectId; initiativeId?: mongoose.Types.ObjectId },
   ): Promise<AssessmentSubmission[]> {
+    const archivedAssessmentIds = query.organizationId
+      ? await findArchivedAssessmentIds(this.assessmentModel, query.organizationId)
+      : [];
+    const archivedInitiativeIds = query.organizationId
+      ? await this.initiativeService.findArchivedIds(query.organizationId.toString())
+      : [];
     const list = await this.submissionModel
-      .find(query)
+      .find({
+        ...query,
+        ...notInArchivedAssessments(archivedAssessmentIds),
+        ...(query.initiativeId ? {} : notInArchivedInitiatives(archivedInitiativeIds)),
+      })
       .sort({ createdAt: -1 })
       .lean()
       .exec();

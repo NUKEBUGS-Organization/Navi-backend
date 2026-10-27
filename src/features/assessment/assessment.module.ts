@@ -10,6 +10,7 @@ import { AssessmentService } from './assessment.service';
 import { AssessmentSubmissionService } from './assessment-submission.service';
 import { KudosModule } from '../kudos/kudos.module';
 import { UserSchema } from '../auth/user.entity';
+import { KudosContributionSchema } from '../kudos/kudos.entity';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { UserSchema } from '../auth/user.entity';
       { name: 'Assessment', schema: AssessmentSchema },
       { name: 'AssessmentSubmission', schema: AssessmentSubmissionSchema },
       { name: 'User', schema: UserSchema },
+      { name: 'KudosContribution', schema: KudosContributionSchema },
     ]),
   ],
   controllers: [AssessmentController, AssessmentSubmissionController],

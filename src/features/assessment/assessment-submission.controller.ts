@@ -62,7 +62,7 @@ export class AssessmentSubmissionController {
       return [];
     }
     if (initiativeId) {
-      return this.submissionService.findByInitiativeId(initiativeId);
+      return this.submissionService.findByInitiativeId(initiativeId, orgId);
     }
     if (mine === 'true' && userId) {
       return this.submissionService.findByUser(orgId, userId);

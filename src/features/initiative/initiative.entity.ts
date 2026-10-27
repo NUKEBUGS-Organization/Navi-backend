@@ -55,9 +55,18 @@ export class Initiative {
   @Prop({ default: 'DRAFT' })
   status: InitiativeStatus;
 
+  /**
+   * Change lead's display name. When `leadUserId` is set this is only a cached copy: reads replace it
+   * with the user's current name (see InitiativeService.withLiveLeadNames), so renames show everywhere.
+   */
   @ApiProperty()
   @Prop({ required: true, default: '' })
   leadName: string;
+
+  /** The change lead's user ID — the source of truth for who leads the initiative. */
+  @ApiProperty({ required: false, type: String })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false, index: true })
+  leadUserId?: mongoose.Types.ObjectId;
 
   /** Executive / change sponsor (display name). */
   @ApiProperty({ required: false })
@@ -125,6 +134,15 @@ export class Initiative {
   @ApiProperty({ type: [Object], required: false })
   @Prop({ type: [FaqSchema], default: [] })
   faqs: { question?: string; answer?: string }[];
+
+  /** Set when an admin archives the initiative (soft delete). See utils/archive.ts. */
+  @ApiProperty({ required: false, type: Date, nullable: true })
+  @Prop({ type: Date, default: null, index: true })
+  archivedAt?: Date | null;
+
+  @ApiProperty({ required: false })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, required: false })
+  archivedById?: mongoose.Types.ObjectId;
 
   @ApiProperty()
   createdAt: Date;
