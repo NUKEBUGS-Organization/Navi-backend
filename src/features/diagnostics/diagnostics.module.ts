@@ -6,6 +6,8 @@ import { ErrorGroupSchema } from './error-group.entity';
 import { ErrorEventSchema } from './error-event.entity';
 import { DiagnosticsService } from './diagnostics.service';
 import { AllExceptionsFilter } from './all-exceptions.filter';
+import { DiagnosticsController } from './diagnostics.controller';
+import { ClientReportRateLimiter } from './rate-limiter';
 
 @Module({
   imports: [
@@ -15,7 +17,12 @@ import { AllExceptionsFilter } from './all-exceptions.filter';
       { name: 'ErrorEvent', schema: ErrorEventSchema },
     ]),
   ],
+  controllers: [DiagnosticsController],
   providers: [
+    {
+      provide: ClientReportRateLimiter,
+      useValue: new ClientReportRateLimiter(60),
+    },
     DiagnosticsService,
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
