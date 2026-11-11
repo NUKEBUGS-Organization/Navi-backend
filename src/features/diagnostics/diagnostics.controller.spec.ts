@@ -91,7 +91,7 @@ describe('DiagnosticsController', () => {
     expect(diagnostics.record.mock.calls[0][0].user).toBeUndefined();
   });
 
-  it('uses first x-forwarded-for entry as ip and request user-agent', async () => {
+  it('uses req.ip (not a client-supplied x-forwarded-for) and request user-agent', async () => {
     await controller.clientErrors(
       batch(1),
       reqWith({
@@ -100,7 +100,7 @@ describe('DiagnosticsController', () => {
       }),
     );
     expect(diagnostics.record).toHaveBeenCalledWith(
-      expect.objectContaining({ ip: '5.5.5.5', userAgent: 'UA/1' }),
+      expect.objectContaining({ ip: '9.9.9.9', userAgent: 'UA/1' }),
     );
     expect(jwt.verify).not.toHaveBeenCalled();
   });
@@ -110,6 +110,15 @@ describe('DiagnosticsController', () => {
       await controller.clientErrors(batch(20), reqWith({}));
     const res = await controller.clientErrors(batch(20), reqWith({}));
     expect(res.accepted).toBe(0);
+    expect(diagnostics.record).toHaveBeenCalledTimes(60);
+  });
+
+  it('rate limits by req.ip even when x-forwarded-for rotates', async () => {
+    for (let i = 0; i < 4; i++)
+      await controller.clientErrors(
+        batch(20),
+        reqWith({ 'x-forwarded-for': `7.7.7.${i}` }),
+      );
     expect(diagnostics.record).toHaveBeenCalledTimes(60);
   });
 

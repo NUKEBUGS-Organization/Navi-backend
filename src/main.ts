@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
@@ -10,6 +10,9 @@ import 'dotenv/config';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   installProcessHandlers(app.get(DiagnosticsService));
+  /** req.ip honours only X-Forwarded-For entries added by our own proxies */
+  const proxyHops = parseInt(process.env.TRUST_PROXY_HOPS ?? '1', 10);
+  app.set('trust proxy', Number.isNaN(proxyHops) ? 1 : proxyHops);
   /** Default ~100kb is too small for base64 profile photos */
   app.useBodyParser('json', { limit: '2mb' });
   app.enableCors({
@@ -37,4 +40,13 @@ async function bootstrap() {
   const port = parseInt(String(process.env.PORT ?? 3000), 10) || 3000;
   await app.listen(port, '0.0.0.0');
 }
-bootstrap();
+// The unhandledRejection listener is non-fatal, so a failed startup must exit explicitly
+// (otherwise the open Mongo connection keeps a zombie process alive).
+bootstrap().catch((err: unknown) => {
+  Logger.error(
+    `Bootstrap failed: ${err instanceof Error ? err.message : String(err)}`,
+    err instanceof Error ? err.stack : undefined,
+    'Bootstrap',
+  );
+  process.exit(1);
+});

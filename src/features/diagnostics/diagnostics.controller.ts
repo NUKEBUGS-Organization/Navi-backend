@@ -52,7 +52,8 @@ export class DiagnosticsController {
       throw new PayloadTooLargeException('Error report payload too large');
     }
 
-    const ip = this.clientIp(req);
+    // req.ip honours 'trust proxy' (TRUST_PROXY_HOPS), so a client cannot spoof it.
+    const ip = req.ip || 'unknown';
     const allowed = this.limiter.allow(ip, body.reports.length);
     if (allowed === 0) return { accepted: 0 };
 
@@ -114,13 +115,6 @@ export class DiagnosticsController {
     @CurrentUser() user: Partial<User>,
   ): Promise<ErrorGroupView> {
     return this.diagnostics.setStatus(id, dto.status, String(user._id));
-  }
-
-  private clientIp(req: Request): string {
-    const fwd = req.headers['x-forwarded-for'];
-    const raw = Array.isArray(fwd) ? fwd[0] : fwd;
-    const first = raw?.split(',')[0]?.trim();
-    return first || req.ip || 'unknown';
   }
 
   private async resolveUser(
