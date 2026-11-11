@@ -1,3 +1,4 @@
+import type { ErrorGroup } from './error-group.entity';
 export type ErrorSource = 'server' | 'client';
 export type ErrorSeverity = 'error' | 'warning';
 export type ErrorKind =
@@ -34,3 +35,13 @@ export interface RecordErrorInput {
 }
 
 export const LIMITS = { message: 500, stack: 8192, componentStack: 4096 };
+
+/** An ErrorGroup as returned by the admin API: id lists replaced by counts. */
+export type ErrorGroupView = Omit<
+  ErrorGroup,
+  '_id' | 'affectedUserIds' | 'affectedOrgIds'
+> & {
+  _id: string;
+  usersAffected: number;
+  orgsAffected: number;
+};

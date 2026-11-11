@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { LIMITS, RecordErrorInput } from './diagnostics.types';
+import { Model, Types } from 'mongoose';
+import { ErrorGroupView, LIMITS, RecordErrorInput } from './diagnostics.types';
+import { ListGroupsQueryDto } from './dto/list-groups.dto';
 import { computeFingerprint, normalizeMessage } from './fingerprint';
 import { maskEmails, redactUrl, truncate } from './sanitize';
 import { ErrorGroup } from './error-group.entity';
@@ -121,6 +122,122 @@ export class DiagnosticsService {
     } catch (err) {
       this.warn('record', err);
     }
+  }
+
+  async getSummary(now = new Date()): Promise<{
+    errorsLast24h: number;
+    warningsLast24h: number;
+    openGroups: number;
+    usersAffectedLast24h: number;
+  }> {
+    const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const window = { createdAt: { $gte: since } };
+    // Events carry no severity; warnings are events of warning-severity groups
+    // (any such group with an event in the window has lastSeen >= since).
+    const warningGroupIds = await this.groupModel.distinct('_id', {
+      severity: 'warning',
+      lastSeen: { $gte: since },
+    });
+    const [total, warningsLast24h, openGroups, users] = await Promise.all([
+      this.eventModel.countDocuments(window),
+      this.eventModel.countDocuments({
+        ...window,
+        groupId: { $in: warningGroupIds },
+      }),
+      this.groupModel.countDocuments({ status: 'open' }),
+      this.eventModel.distinct('userId', window),
+    ]);
+    return {
+      errorsLast24h: total - warningsLast24h,
+      warningsLast24h,
+      openGroups,
+      usersAffectedLast24h: users.length,
+    };
+  }
+
+  async listGroups(q: ListGroupsQueryDto): Promise<{
+    items: ErrorGroupView[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = q.page ?? 1;
+    const limit = q.limit ?? 25;
+    const severity = q.severity ?? 'error';
+    const status = q.status ?? 'open';
+
+    const filter: Record<string, unknown> = {};
+    if (severity !== 'all') filter.severity = severity;
+    if (status !== 'all') filter.status = status;
+    if (q.source) filter.source = q.source;
+    if (q.q) {
+      const pattern = q.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { message: { $regex: pattern, $options: 'i' } },
+        { route: { $regex: pattern, $options: 'i' } },
+      ];
+    }
+
+    const [groups, total] = await Promise.all([
+      this.groupModel
+        .find(filter)
+        .sort({ lastSeen: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.groupModel.countDocuments(filter),
+    ]);
+    return { items: groups.map((g) => this.toView(g)), total, page, limit };
+  }
+
+  async getGroup(
+    id: string,
+  ): Promise<{ group: ErrorGroupView; events: ErrorEvent[] }> {
+    if (!validId(id)) throw new NotFoundException('Error group not found');
+    const group = await this.groupModel.findById(id).lean();
+    if (!group) throw new NotFoundException('Error group not found');
+    const events = await this.eventModel
+      .find({ groupId: id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+    return { group: this.toView(group), events: events as ErrorEvent[] };
+  }
+
+  async setStatus(
+    id: string,
+    status: 'open' | 'resolved',
+    userId: string,
+  ): Promise<ErrorGroupView> {
+    if (!validId(id)) throw new NotFoundException('Error group not found');
+    const update =
+      status === 'resolved'
+        ? {
+            $set: {
+              status,
+              resolvedAt: new Date(),
+              resolvedBy: new Types.ObjectId(userId),
+            },
+          }
+        : {
+            $set: { status },
+            $unset: { resolvedAt: 1, resolvedBy: 1 },
+          };
+    const group = await this.groupModel
+      .findByIdAndUpdate(id, update, { new: true })
+      .lean();
+    if (!group) throw new NotFoundException('Error group not found');
+    return this.toView(group);
+  }
+
+  private toView(group: ErrorGroup): ErrorGroupView {
+    const { affectedUserIds, affectedOrgIds, _id, ...rest } = group;
+    return {
+      ...rest,
+      _id: _id.toString(),
+      usersAffected: affectedUserIds?.length ?? 0,
+      orgsAffected: affectedOrgIds?.length ?? 0,
+    };
   }
 
   private async safely(

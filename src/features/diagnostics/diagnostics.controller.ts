@@ -1,20 +1,33 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
   PayloadTooLargeException,
   Post,
+  Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
 import { DiagnosticsService } from './diagnostics.service';
 import { ClientReportRateLimiter } from './rate-limiter';
 import { ClientErrorBatchDto } from './dto/client-error.dto';
-import type { RecordErrorInput } from './diagnostics.types';
+import type { ErrorGroupView, RecordErrorInput } from './diagnostics.types';
+import { ListGroupsQueryDto } from './dto/list-groups.dto';
+import { UpdateGroupDto } from './dto/update-group.dto';
+import { ErrorEvent } from './error-event.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { User, UserRole } from '../auth/user.entity';
 
 const MAX_BODY_CHARS = 32 * 1024;
 
@@ -63,6 +76,44 @@ export class DiagnosticsController {
       });
     }
     return { accepted: allowed };
+  }
+
+  @Get('summary')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  getSummary() {
+    return this.diagnostics.getSummary();
+  }
+
+  @Get('groups')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  listGroups(@Query() query: ListGroupsQueryDto) {
+    return this.diagnostics.listGroups(query);
+  }
+
+  @Get('groups/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  getGroup(
+    @Param('id') id: string,
+  ): Promise<{ group: ErrorGroupView; events: ErrorEvent[] }> {
+    return this.diagnostics.getGroup(id);
+  }
+
+  @Patch('groups/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  updateGroup(
+    @Param('id') id: string,
+    @Body() dto: UpdateGroupDto,
+    @CurrentUser() user: Partial<User>,
+  ): Promise<ErrorGroupView> {
+    return this.diagnostics.setStatus(id, dto.status, String(user._id));
   }
 
   private clientIp(req: Request): string {

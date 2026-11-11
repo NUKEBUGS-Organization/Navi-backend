@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { DiagnosticsService } from './diagnostics.service';
@@ -160,5 +161,222 @@ describe('DiagnosticsService', () => {
     service.record(sampleInput);
     await new Promise((r) => setImmediate(r));
     expect(groupModel.findOneAndUpdate).toHaveBeenCalled();
+  });
+});
+
+describe('DiagnosticsService queries', () => {
+  const oid = (n: number) =>
+    `64b7f0c2e4b0a1a2b3c4d5${n.toString(16).padStart(2, '0')}`;
+  const chain = (result: unknown) => {
+    const c: Record<string, jest.Mock> = {};
+    for (const m of ['sort', 'skip', 'limit']) c[m] = jest.fn(() => c);
+    c.lean = jest.fn().mockResolvedValue(result);
+    return c;
+  };
+  let service: DiagnosticsService;
+  let groupModel: {
+    find: jest.Mock;
+    findById: jest.Mock;
+    findByIdAndUpdate: jest.Mock;
+    countDocuments: jest.Mock;
+    distinct: jest.Mock;
+  };
+  let eventModel: {
+    find: jest.Mock;
+    countDocuments: jest.Mock;
+    distinct: jest.Mock;
+  };
+
+  const rawGroup = () => ({
+    _id: { toString: () => gid },
+    message: 'm',
+    count: 3,
+    affectedUserIds: [oid(1), oid(2)],
+    affectedOrgIds: [oid(3)],
+  });
+
+  beforeEach(() => {
+    groupModel = {
+      find: jest.fn(),
+      findById: jest.fn(),
+      findByIdAndUpdate: jest.fn(),
+      distinct: jest.fn(),
+      countDocuments: jest.fn(),
+    };
+    eventModel = {
+      find: jest.fn(),
+      countDocuments: jest.fn(),
+      distinct: jest.fn(),
+    };
+    service = new DiagnosticsService(groupModel as never, eventModel as never);
+  });
+
+  describe('getSummary', () => {
+    it('counts events in the last 24h and open groups', async () => {
+      const now = new Date('2026-11-11T12:00:00Z');
+      // Events carry no severity: warnings are events of warning-severity groups.
+      groupModel.distinct.mockResolvedValue(['w1', 'w2']);
+      eventModel.countDocuments.mockImplementation((f: { groupId?: unknown }) =>
+        Promise.resolve(f.groupId ? 2 : 9),
+      );
+      eventModel.distinct.mockResolvedValue(['a', 'b', 'c']);
+      groupModel.countDocuments.mockResolvedValue(4);
+
+      const res = await service.getSummary(now);
+
+      expect(res).toEqual({
+        errorsLast24h: 7,
+        warningsLast24h: 2,
+        openGroups: 4,
+        usersAffectedLast24h: 3,
+      });
+      const since = new Date('2026-11-10T12:00:00Z');
+      expect(groupModel.countDocuments).toHaveBeenCalledWith({
+        status: 'open',
+      });
+      expect(eventModel.distinct).toHaveBeenCalledWith('userId', {
+        createdAt: { $gte: since },
+      });
+    });
+  });
+
+  describe('listGroups', () => {
+    beforeEach(() => {
+      groupModel.find.mockReturnValue(chain([rawGroup()]));
+      groupModel.countDocuments.mockResolvedValue(1);
+    });
+
+    it('defaults to open errors, newest first, page 1 of 25', async () => {
+      const res = await service.listGroups({});
+      expect(groupModel.find).toHaveBeenCalledWith({
+        severity: 'error',
+        status: 'open',
+      });
+      const c = groupModel.find.mock.results[0].value;
+      expect(c.sort).toHaveBeenCalledWith({ lastSeen: -1 });
+      expect(c.skip).toHaveBeenCalledWith(0);
+      expect(c.limit).toHaveBeenCalledWith(25);
+      expect(res.page).toBe(1);
+      expect(res.limit).toBe(25);
+      expect(res.total).toBe(1);
+    });
+
+    it('returns views without affected id lists but with counts', async () => {
+      const res = await service.listGroups({});
+      expect(res.items[0]).toEqual({
+        _id: gid,
+        message: 'm',
+        count: 3,
+        usersAffected: 2,
+        orgsAffected: 1,
+      });
+    });
+
+    it('uses an empty filter for severity=all and status=all', async () => {
+      await service.listGroups({ severity: 'all', status: 'all' });
+      expect(groupModel.find).toHaveBeenCalledWith({});
+    });
+
+    it('applies source, paging and escapes the search text', async () => {
+      await service.listGroups({
+        source: 'client',
+        q: 'a.b(',
+        page: 3,
+        limit: 10,
+      });
+      const filter = groupModel.find.mock.calls[0][0];
+      expect(filter.source).toBe('client');
+      expect(filter.$or).toEqual([
+        { message: { $regex: 'a\\.b\\(', $options: 'i' } },
+        { route: { $regex: 'a\\.b\\(', $options: 'i' } },
+      ]);
+      const c = groupModel.find.mock.results[0].value;
+      expect(c.skip).toHaveBeenCalledWith(20);
+      expect(c.limit).toHaveBeenCalledWith(10);
+    });
+
+    it('escapes every regex metacharacter', async () => {
+      await service.listGroups({ q: '.*+?^${}()|[]\\' });
+      const pattern = groupModel.find.mock.calls[0][0].$or[0].message.$regex;
+      expect(pattern).toBe('\\.\\*\\+\\?\\^\\$\\{\\}\\(\\)\\|\\[\\]\\\\');
+    });
+  });
+
+  describe('getGroup', () => {
+    it('throws NotFoundException for an invalid id without querying', async () => {
+      await expect(service.getGroup('not-an-id')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(groupModel.findById).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when the group does not exist', async () => {
+      groupModel.findById.mockReturnValue(chain(null));
+      await expect(service.getGroup(gid)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('returns the group view and the 50 newest events', async () => {
+      groupModel.findById.mockReturnValue(chain(rawGroup()));
+      const events = [{ message: 'e' }];
+      const ec = chain(events);
+      eventModel.find.mockReturnValue(ec);
+
+      const res = await service.getGroup(gid);
+
+      expect(eventModel.find).toHaveBeenCalledWith({ groupId: gid });
+      expect(ec.sort).toHaveBeenCalledWith({ createdAt: -1 });
+      expect(ec.limit).toHaveBeenCalledWith(50);
+      expect(res.events).toBe(events);
+      expect(res.group).toMatchObject({
+        _id: gid,
+        usersAffected: 2,
+        orgsAffected: 1,
+      });
+      expect(res.group).not.toHaveProperty('affectedUserIds');
+    });
+  });
+
+  describe('setStatus', () => {
+    const uid = oid(9);
+
+    it('resolves with resolvedAt and resolvedBy', async () => {
+      groupModel.findByIdAndUpdate.mockReturnValue(chain(rawGroup()));
+      await service.setStatus(gid, 'resolved', uid);
+      const [id, update, opts] = groupModel.findByIdAndUpdate.mock.calls[0];
+      expect(id).toBe(gid);
+      expect(update.$set.status).toBe('resolved');
+      expect(update.$set.resolvedAt).toBeInstanceOf(Date);
+      expect(String(update.$set.resolvedBy)).toBe(uid);
+      expect(update.$unset).toBeUndefined();
+      expect(opts).toEqual({ new: true });
+    });
+
+    it('reopens by unsetting resolvedAt and resolvedBy', async () => {
+      groupModel.findByIdAndUpdate.mockReturnValue(chain(rawGroup()));
+      await service.setStatus(gid, 'open', uid);
+      const [, update] = groupModel.findByIdAndUpdate.mock.calls[0];
+      expect(update).toEqual({
+        $set: { status: 'open' },
+        $unset: { resolvedAt: 1, resolvedBy: 1 },
+      });
+    });
+
+    it('returns the updated view', async () => {
+      groupModel.findByIdAndUpdate.mockReturnValue(chain(rawGroup()));
+      const res = await service.setStatus(gid, 'open', uid);
+      expect(res).toMatchObject({ _id: gid, usersAffected: 2 });
+    });
+
+    it('throws NotFoundException for invalid or unknown ids', async () => {
+      await expect(
+        service.setStatus('nope', 'open', uid),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      groupModel.findByIdAndUpdate.mockReturnValue(chain(null));
+      await expect(service.setStatus(gid, 'open', uid)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
   });
 });
