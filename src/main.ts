@@ -2,11 +2,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { DiagnosticsService } from './features/diagnostics/diagnostics.service';
+import { installProcessHandlers } from './features/diagnostics/process-handlers';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import 'dotenv/config';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  installProcessHandlers(app.get(DiagnosticsService));
   /** Default ~100kb is too small for base64 profile photos */
   app.useBodyParser('json', { limit: '2mb' });
   app.enableCors({
