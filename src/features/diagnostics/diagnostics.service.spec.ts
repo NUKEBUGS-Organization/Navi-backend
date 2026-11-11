@@ -106,6 +106,56 @@ describe('DiagnosticsService', () => {
     await expect(service.recordAsync(sampleInput)).resolves.toBeUndefined();
   });
 
+  it('drops an invalid userId but keeps the event and the org update', async () => {
+    await service.recordAsync({
+      ...sampleInput,
+      user: { ...sampleInput.user, id: 'not-an-id' },
+    });
+    expect(eventModel.create).toHaveBeenCalledTimes(1);
+    const event = eventModel.create.mock.calls[0][0];
+    expect(event.userId).toBeUndefined();
+    expect(event.organizationId).toBe(sampleInput.user!.organizationId);
+    expect(groupModel.updateOne).toHaveBeenCalledWith(
+      { _id: gid },
+      { $addToSet: { affectedOrgIds: sampleInput.user!.organizationId } },
+    );
+    expect(groupModel.updateOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops an invalid organizationId but keeps the event and user update', async () => {
+    await service.recordAsync({
+      ...sampleInput,
+      user: { ...sampleInput.user, organizationId: 'bad-org' },
+    });
+    const event = eventModel.create.mock.calls[0][0];
+    expect(event.organizationId).toBeUndefined();
+    expect(event.userId).toBe(sampleInput.user!.id);
+    expect(groupModel.updateOne).toHaveBeenCalledWith(
+      { _id: gid },
+      { $addToSet: { affectedUserIds: sampleInput.user!.id } },
+    );
+  });
+
+  it('inserts the event even if group follow-up updates fail', async () => {
+    groupModel.updateOne.mockRejectedValue(new Error('boom'));
+    await expect(service.recordAsync(sampleInput)).resolves.toBeUndefined();
+    expect(eventModel.create).toHaveBeenCalledTimes(1);
+    expect(groupModel.updateOne).toHaveBeenCalledTimes(2);
+  });
+
+  it('still updates the group when the event insert fails', async () => {
+    eventModel.create.mockRejectedValue(new Error('boom'));
+    await service.recordAsync(sampleInput);
+    expect(groupModel.updateOne).toHaveBeenCalledTimes(2);
+  });
+
+  it('defaults an empty message so the event is not dropped', async () => {
+    await service.recordAsync({ ...sampleInput, message: '' });
+    const [, update] = groupModel.findOneAndUpdate.mock.calls[0];
+    expect(update.$set.message).toBe('TypeError');
+    expect(eventModel.create.mock.calls[0][0].message).toBe('TypeError');
+  });
+
   it('record() does not throw and triggers recordAsync', async () => {
     service.record(sampleInput);
     await new Promise((r) => setImmediate(r));
