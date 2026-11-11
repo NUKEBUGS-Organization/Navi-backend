@@ -15,6 +15,7 @@ import { KudosModule } from './features/kudos/kudos.module';
 import { KnowledgeHubModule } from './features/knowledge-hub/knowledge-hub.module';
 import { MailModule } from './features/mail/mail.module';
 import { AiModule } from './features/ai/ai.module';
+import { DiagnosticsModule } from './features/diagnostics/diagnostics.module';
 import { AppController } from './app.controller';
 
 /** Local default avoids Atlas SRV DNS (`querySrv ECONNREFUSED`) when offline/VPN/firewall blocks SRV. Set MONGODB_URI for Atlas/production. */
@@ -44,6 +45,7 @@ const DEFAULT_MONGO_URI = 'mongodb://127.0.0.1:27017/navi';
     KnowledgeHubModule,
     MailModule,
     AiModule,
+    DiagnosticsModule,
   ],
   providers: [],
   controllers: [AppController],
