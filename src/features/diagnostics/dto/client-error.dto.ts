@@ -45,6 +45,12 @@ export class ClientErrorReportDto {
   @MaxLength(2000)
   pageUrl: string;
 
+  /** Page path pattern, e.g. `/initiatives/:id`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  route?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(100)

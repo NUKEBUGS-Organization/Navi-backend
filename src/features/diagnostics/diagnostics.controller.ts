@@ -70,6 +70,7 @@ export class DiagnosticsController {
         stack: report.stack,
         componentStack: report.componentStack,
         pageUrl: report.pageUrl,
+        route: report.route,
         appVersion: report.appVersion,
         user,
         userAgent,

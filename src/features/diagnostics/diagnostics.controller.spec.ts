@@ -122,6 +122,30 @@ describe('DiagnosticsController', () => {
     expect(diagnostics.record).toHaveBeenCalledTimes(60);
   });
 
+  it('passes the client page route pattern through to record()', async () => {
+    await controller.clientErrors(
+      batch(1, { route: '/initiatives/:id' }),
+      reqWith({}),
+    );
+    expect(diagnostics.record).toHaveBeenCalledWith(
+      expect.objectContaining({ route: '/initiatives/:id' }),
+    );
+    expect(
+      await validate(
+        plainToInstance(ClientErrorBatchDto, {
+          reports: [{ ...validReport, route: 'r'.repeat(201) }],
+        }),
+      ),
+    ).not.toHaveLength(0);
+    expect(
+      await validate(
+        plainToInstance(ClientErrorBatchDto, {
+          reports: [{ ...validReport, route: '/tasks/:id' }],
+        }),
+      ),
+    ).toHaveLength(0);
+  });
+
   it('rejects bodies over 32 KB with 413', async () => {
     await expect(
       controller.clientErrors(

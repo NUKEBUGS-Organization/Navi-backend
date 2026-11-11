@@ -14,13 +14,16 @@ export function normalizeMessage(message: string): string {
     .replace(/\b\d+\b/g, '<n>');
 }
 
+/** V8 `at fn (url:l:c)` or Firefox/Safari `fn@url:l:c` stack frames. */
+const FRAME = /^at |^[^\s@]*@.*:\d+:\d+$/;
+
 /** First stack frame outside node_modules, without line/column numbers. */
 export function topFrame(stack?: string): string | undefined {
   if (!stack) return undefined;
   const frame = stack
     .split('\n')
     .map((line) => line.trim())
-    .find((line) => line.startsWith('at ') && !line.includes('node_modules'));
+    .find((line) => FRAME.test(line) && !line.includes('node_modules'));
   return frame?.replace(/:\d+:\d+(\)?)$/, '$1');
 }
 
@@ -35,7 +38,7 @@ export function computeFingerprint(
     i.kind,
     i.name,
     normalizeMessage(i.message),
-    i.route ?? topFrame(i.stack) ?? '',
+    i.route || topFrame(i.stack) || '',
   ];
   return createHash('sha1').update(parts.join('|')).digest('hex');
 }

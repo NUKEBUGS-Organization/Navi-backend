@@ -45,4 +45,55 @@ describe('fingerprint', () => {
       computeFingerprint({ ...base, route: 'GET /tasks/:id', message: 'x' }),
     ).not.toBe(computeFingerprint({ ...base, message: 'x' }));
   });
+
+  it('top frame understands Firefox/Safari fn@url:l:c frames', () => {
+    const ff =
+      'handleClick@https://app.example.com/assets/index-abc123.js:12:345\n' +
+      '@https://app.example.com/assets/vendor.js:1:2';
+    expect(topFrame(ff)).toBe(
+      'handleClick@https://app.example.com/assets/index-abc123.js',
+    );
+    expect(topFrame('@https://app.example.com/assets/index.js:3:4')).toBe(
+      '@https://app.example.com/assets/index.js',
+    );
+    expect(topFrame('TypeError: no frames here')).toBeUndefined();
+  });
+
+  it('falls back to the top frame when route is empty', () => {
+    const base = {
+      source: 'client',
+      kind: 'window_error',
+      name: 'TypeError',
+      message: 'x is undefined',
+    } as const;
+    const stackA = 'TypeError: x\n    at f (https://a/assets/index-AAA.js:1:2)';
+    const stackB = 'TypeError: x\n    at f (https://a/assets/index-BBB.js:1:2)';
+    expect(computeFingerprint({ ...base, route: '', stack: stackA })).toBe(
+      computeFingerprint({ ...base, stack: stackA }),
+    );
+    expect(computeFingerprint({ ...base, route: '', stack: stackA })).not.toBe(
+      computeFingerprint({ ...base, route: '', stack: stackB }),
+    );
+  });
+
+  it('client errors with a page route group across deploys (bundle hashes)', () => {
+    const base = {
+      source: 'client',
+      kind: 'window_error',
+      name: 'TypeError',
+      message: 'x is undefined',
+      route: '/initiatives/:id',
+    } as const;
+    expect(
+      computeFingerprint({
+        ...base,
+        stack: 'f@https://a/assets/index-AAA.js:1:2',
+      }),
+    ).toBe(
+      computeFingerprint({
+        ...base,
+        stack: 'f@https://a/assets/index-BBB.js:9:9',
+      }),
+    );
+  });
 });
