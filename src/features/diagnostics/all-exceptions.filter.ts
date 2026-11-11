@@ -1,4 +1,9 @@
-import { ArgumentsHost, Catch, HttpException } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  HttpException,
+  NotFoundException,
+} from '@nestjs/common';
 import { BaseExceptionFilter, HttpAdapterHost } from '@nestjs/core';
 import { DiagnosticsService } from './diagnostics.service';
 import { RecordErrorInput } from './diagnostics.types';
@@ -23,6 +28,32 @@ const str = (value: unknown): string | undefined =>
   value === undefined || value === null || value === ''
     ? undefined
     : String(value);
+
+/** HTTP status for the exception, including non-Nest errors carrying one (e.g. body-parser). */
+function statusOf(exception: unknown): number {
+  if (exception instanceof HttpException) return exception.getStatus();
+  if (typeof exception === 'object' && exception !== null) {
+    const e = exception as { status?: unknown; statusCode?: unknown };
+    const status = e.status ?? e.statusCode;
+    if (typeof status === 'number' && status >= 400 && status <= 599) {
+      return status;
+    }
+  }
+  return 500;
+}
+
+const hasBody = (exception: unknown): boolean =>
+  typeof exception === 'object' && exception !== null && 'body' in exception;
+
+/** body-parser JSON failure; V8's message quotes the raw request body. */
+function isBodyParseError(exception: unknown): boolean {
+  if (typeof exception !== 'object' || exception === null) return false;
+  const e = exception as { type?: unknown; status?: unknown };
+  return (
+    e.type === 'entity.parse.failed' ||
+    (exception instanceof SyntaxError && (e.status === 400 || hasBody(e)))
+  );
+}
 
 @Catch()
 export class AllExceptionsFilter extends BaseExceptionFilter {
@@ -51,9 +82,20 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
     if (pathOnly.startsWith('/diagnostics')) return;
 
     const method = request.method ?? '';
-    const statusCode =
-      exception instanceof HttpException ? exception.getStatus() : 500;
+    const routePattern = request.route?.path;
+    const statusCode = statusOf(exception);
     const isError = exception instanceof Error;
+    const bodyParseError = isBodyParseError(exception);
+
+    let message = isError ? exception.message : String(exception);
+    if (bodyParseError) {
+      message = 'Malformed JSON body';
+    } else if (!routePattern && exception instanceof NotFoundException) {
+      // Nest's "Cannot GET /raw/path": a fixed message keeps scanner probes in one group.
+      message = `Cannot ${method} (unmatched route)`;
+    }
+    // Errors carrying the request body (body-parser) must not leak it via the stack.
+    const keepStack = isError && !bodyParseError && !hasBody(exception);
     const userAgent = request.headers?.['user-agent'];
     const user = request.user;
 
@@ -62,14 +104,14 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
       severity: statusCode >= 500 ? 'error' : 'warning',
       kind: 'http_exception',
       name: isError ? exception.constructor?.name || 'Error' : 'NonError',
-      message: isError ? exception.message : String(exception),
-      stack: isError ? exception.stack : undefined,
+      message,
+      stack: keepStack ? exception.stack : undefined,
       statusCode,
       method,
       path,
-      route: request.route?.path
-        ? `${method} ${request.route.path}`
-        : `${method} ${pathOnly}`,
+      route: routePattern
+        ? `${method} ${routePattern}`
+        : `${method} (unmatched)`,
       user: user
         ? {
             id: str(user._id ?? user.id),
