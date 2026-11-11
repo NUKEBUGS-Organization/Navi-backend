@@ -74,4 +74,40 @@ describe('installProcessHandlers', () => {
       expect.objectContaining({ name: 'NonError', message: 'just a string' }),
     );
   });
+
+  const hostile = () => {
+    const e = new Error('x');
+    Object.defineProperty(e, 'message', {
+      get() {
+        throw new Error('getter boom');
+      },
+    });
+    Object.defineProperty(e, 'stack', {
+      get() {
+        throw new Error('stack boom');
+      },
+    });
+    return e;
+  };
+  const hostileValue = {
+    toString() {
+      throw new Error('toString boom');
+    },
+  };
+
+  it('still exits with 1 when the reason cannot be printed', async () => {
+    await handlers.uncaughtException(hostile());
+    await handlers.uncaughtException(hostileValue);
+    expect(proc.exit).toHaveBeenCalledTimes(2);
+    expect(proc.exit).toHaveBeenCalledWith(1);
+  });
+
+  it('rejection handler never throws', () => {
+    expect(() => handlers.unhandledRejection(hostile())).not.toThrow();
+    expect(() => handlers.unhandledRejection(hostileValue)).not.toThrow();
+    diagnostics.record.mockImplementation(() => {
+      throw new Error('record boom');
+    });
+    expect(() => handlers.unhandledRejection(new Error('a'))).not.toThrow();
+  });
 });
