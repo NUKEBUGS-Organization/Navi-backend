@@ -59,5 +59,3 @@ temp_auto_push.bat
 temp_interactive_push.bat
 
 # Restored after malware cleanup
-.env
-.vscode/*

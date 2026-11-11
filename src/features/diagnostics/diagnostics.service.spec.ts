@@ -157,6 +157,30 @@ describe('DiagnosticsService', () => {
     expect(eventModel.create.mock.calls[0][0].message).toBe('TypeError');
   });
 
+  it('defaults an empty name to Error', async () => {
+    await service.recordAsync({ ...sampleInput, name: '' });
+    const [, update] = groupModel.findOneAndUpdate.mock.calls[0];
+    expect(update.$setOnInsert.name).toBe('Error');
+    expect(eventModel.create.mock.calls[0][0].name).toBe('Error');
+  });
+
+  it('masks emails in stack and componentStack', async () => {
+    await service.recordAsync({
+      ...sampleInput,
+      stack: 'Error: no user a@b.co\n    at f (x.js:1:2)',
+      componentStack: '\n    at Profile (email=c@d.org)',
+    });
+    const event = eventModel.create.mock.calls[0][0];
+    expect(event.stack).toBe('Error: no user <email>\n    at f (x.js:1:2)');
+    expect(event.componentStack).toBe('\n    at Profile (email=<email>)');
+  });
+
+  it('does not set an empty route on the group', async () => {
+    await service.recordAsync({ ...sampleInput, route: '' });
+    const [, update] = groupModel.findOneAndUpdate.mock.calls[0];
+    expect(update.$set).not.toHaveProperty('route');
+  });
+
   it('record() does not throw and triggers recordAsync', async () => {
     service.record(sampleInput);
     await new Promise((r) => setImmediate(r));

@@ -33,10 +33,13 @@ export class DiagnosticsService {
     try {
       const now = new Date();
       // An empty message would fail the required validator and lose the event.
-      const rawMessage = input.message?.trim()
-        ? input.message
-        : input.name || '(no message)';
-      const fingerprint = computeFingerprint({ ...input, message: rawMessage });
+      const name = input.name?.trim() ? input.name : 'Error';
+      const rawMessage = input.message?.trim() ? input.message : name;
+      const fingerprint = computeFingerprint({
+        ...input,
+        name,
+        message: rawMessage,
+      });
       const userId = validId(input.user?.id);
       const orgId = validId(input.user?.organizationId);
 
@@ -46,7 +49,7 @@ export class DiagnosticsService {
         message: truncate(normalizeMessage(rawMessage), LIMITS.message),
       };
       if (input.statusCode !== undefined) set.statusCode = input.statusCode;
-      if (input.route !== undefined) set.route = input.route;
+      if (input.route) set.route = input.route;
 
       const update: Record<string, unknown> = {
         $inc: { count: 1 },
@@ -55,7 +58,7 @@ export class DiagnosticsService {
           firstSeen: now,
           source: input.source,
           kind: input.kind,
-          name: input.name,
+          name,
           status: 'open',
         },
       };
@@ -71,11 +74,13 @@ export class DiagnosticsService {
       await this.safely('event insert', () =>
         this.eventModel.create({
           groupId: group?._id,
-          name: input.name,
+          name,
           message: truncate(maskEmails(rawMessage), LIMITS.message),
-          stack: input.stack ? truncate(input.stack, LIMITS.stack) : undefined,
+          stack: input.stack
+            ? truncate(maskEmails(input.stack), LIMITS.stack)
+            : undefined,
           componentStack: input.componentStack
-            ? truncate(input.componentStack, LIMITS.componentStack)
+            ? truncate(maskEmails(input.componentStack), LIMITS.componentStack)
             : undefined,
           statusCode: input.statusCode,
           method: input.method,
